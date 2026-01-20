@@ -46,33 +46,68 @@ class AppViewModel {
         }
     }
     
-    // MARK: - GESTÃO DE COMBUSTÍVEL
+    // MARK: - GESTÃO DE COMBUSTÍVEL (LÓGICA CORRIGIDA: NÍVEL DO TANQUE)
     
     func addFuelLog(_ log: FuelLog, to carID: UUID) {
         if let index = myCars.firstIndex(where: { $0.id == carID }) {
-            var finalLog = log
+            var newLog = log
+            let carCapacity = myCars[index].tankCapacity
             
-            // Tenta obter o registo mais recente para cálculos
+            // O novo log começa sem eficiência (será calculada quando houver um próximo)
+            newLog.efficiency = nil
+            
+            // Verifica se existe log anterior
             if let previousLog = myCars[index].fuelLogs.first {
-                if log.odometer > previousLog.odometer {
-                    let dist = log.odometer - previousLog.odometer
-                    finalLog.distanceTraveled = dist
+                
+                // 1. Calcula distância percorrida
+                let dist = newLog.odometer - previousLog.odometer
+                newLog.distanceTraveled = dist
+                
+                // 2. CÁLCULO DO CONSUMO (A LÓGICA QUE PEDISTE)
+                // Vamos calcular quantos litros foram realmente "queimados" com base na diferença de nível do tanque.
+                
+                var consumedLiters: Double = 0.0
+                
+                // Recuperamos o nível com que o carro ficou DEPOIS do abastecimento anterior
+                // Se não tiver registo, assumimos 1.0 (Cheio) se foi marcado como Full, ou 0 se não sabemos.
+                let levelAfterPrev = previousLog.fuelLevelAfter ?? (previousLog.isFullTank ? 1.0 : 0)
+                
+                // O nível com que chegaste AGORA à bomba (ex: 0.50 ou 50%)
+                let levelBeforeCurr = newLog.fuelLevelBefore
+                
+                // Se o carro tiver capacidade definida e os níveis forem válidos
+                if carCapacity > 0 && levelAfterPrev > 0 {
+                    // Diferença: Saiu com 100%, Chegou com 50% -> Gastou 50%
+                    let percentageUsed = max(0, levelAfterPrev - levelBeforeCurr)
+                    consumedLiters = percentageUsed * carCapacity
                     
-                    if dist > 0 && log.isFullTank {
-                        let eff = (log.liters / dist) * 100
-                        finalLog.efficiency = eff
-                    } else {
-                        finalLog.efficiency = nil
+                    // SEGURANÇA:
+                    // Se o cálculo pelos níveis der zero (ex: o utilizador esqueceu-se dos sliders),
+                    // e o utilizador atestou agora (Full Tank), usamos os litros da bomba como fallback.
+                    if consumedLiters == 0 && newLog.isFullTank {
+                        consumedLiters = newLog.liters
                     }
+                } else {
+                    // Se não temos capacidade do tanque configurada, usamos a lógica antiga (Litros da Bomba)
+                    // Mas apenas se for Tanque Cheio, senão não conseguimos adivinhar.
+                    if newLog.isFullTank {
+                        consumedLiters = newLog.liters
+                    }
+                }
+                
+                // 3. Atualiza a eficiência do log ANTERIOR
+                if dist > 0 && consumedLiters > 0 {
+                    let efficiency = (consumedLiters / dist) * 100
+                    myCars[index].fuelLogs[0].efficiency = efficiency
                 }
             }
             
-            // Insere o log
-            myCars[index].fuelLogs.insert(finalLog, at: 0)
+            // Insere o novo log
+            myCars[index].fuelLogs.insert(newLog, at: 0)
             
-            // --- ATUALIZA KM DO CARRO (AQUI ESTÁ O QUE PEDISTE) ---
-            if log.odometer > myCars[index].kilometers {
-                myCars[index].kilometers = log.odometer
+            // Atualiza KMs
+            if newLog.odometer > myCars[index].kilometers {
+                myCars[index].kilometers = newLog.odometer
             }
             
             dataStore.saveCars(myCars)
@@ -81,9 +116,16 @@ class AppViewModel {
     
     func deleteFuelLog(at offsets: IndexSet, from carID: UUID) {
         if let carIndex = myCars.firstIndex(where: { $0.id == carID }) {
-            // Se apagarmos o registo mais recente, talvez devêssemos reverter os km do carro,
-            // mas por segurança geralmente mantém-se o valor mais alto registado.
             myCars[carIndex].fuelLogs.remove(atOffsets: offsets)
+            
+            // Ao apagar, tentamos recuperar a consistência do último log
+            if let newLatestLog = myCars[carIndex].fuelLogs.first {
+                myCars[carIndex].kilometers = newLatestLog.odometer
+                
+                var updatedLog = newLatestLog
+                updatedLog.efficiency = nil // Perdeu a referência de consumo futuro
+                myCars[carIndex].fuelLogs[0] = updatedLog
+            }
             dataStore.saveCars(myCars)
         }
     }
@@ -92,38 +134,78 @@ class AppViewModel {
         if let carIndex = myCars.firstIndex(where: { $0.id == carID }) {
             if let logIndex = myCars[carIndex].fuelLogs.firstIndex(where: { $0.id == updatedLog.id }) {
                 
-                var finalLog = updatedLog
+                var currentLog = updatedLog
+                let carCapacity = myCars[carIndex].tankCapacity
                 
-                // Recalcular lógica com o registo anterior
-                let prevIndex = logIndex + 1
-                if prevIndex < myCars[carIndex].fuelLogs.count {
-                    let previousLog = myCars[carIndex].fuelLogs[prevIndex]
+                let nextLogIndex = logIndex - 1 // Futuro
+                let prevLogIndex = logIndex + 1 // Passado
+                
+                // 1. ATUALIZAR ESTE LOG (Com base no Passado)
+                if prevLogIndex < myCars[carIndex].fuelLogs.count {
+                    let prevLog = myCars[carIndex].fuelLogs[prevLogIndex]
+                    let dist = currentLog.odometer - prevLog.odometer
+                    currentLog.distanceTraveled = dist
                     
-                    if finalLog.odometer > previousLog.odometer {
-                        let dist = finalLog.odometer - previousLog.odometer
-                        finalLog.distanceTraveled = dist
-                        
-                        if dist > 0 && finalLog.isFullTank {
-                            let eff = (finalLog.liters / dist) * 100
-                            finalLog.efficiency = eff
-                        } else {
-                            finalLog.efficiency = nil
-                        }
+                    // RECALCULAR EFICIÊNCIA DO ANTERIOR
+                    // Baseado nos níveis: (NivelFinalAnterior - NivelInicialDeste) * Capacidade
+                    let levelAfterPrev = prevLog.fuelLevelAfter ?? (prevLog.isFullTank ? 1.0 : 0)
+                    let levelBeforeCurr = currentLog.fuelLevelBefore
+                    
+                    var consumedLiters = 0.0
+                    
+                    if carCapacity > 0 && levelAfterPrev > 0 {
+                        let pctUsed = max(0, levelAfterPrev - levelBeforeCurr)
+                        consumedLiters = pctUsed * carCapacity
+                    }
+                    // Fallback se os sliders falharem mas for tanque cheio
+                    if consumedLiters == 0 && currentLog.isFullTank {
+                        consumedLiters = currentLog.liters
+                    }
+                    
+                    if dist > 0 && consumedLiters > 0 {
+                        let prevEff = (consumedLiters / dist) * 100
+                        myCars[carIndex].fuelLogs[prevLogIndex].efficiency = prevEff
                     }
                 }
                 
-                // Atualiza o log na lista
-                myCars[carIndex].fuelLogs[logIndex] = finalLog
-                
-                // --- ATUALIZA KM DO CARRO (EDITAR) ---
-                // Se estamos a editar o registo mais recente (índice 0) E os kms aumentaram
-                // ou mudaram para um valor superior ao que o carro tem:
-                if logIndex == 0 {
-                    // Simplesmente definimos os kms do carro para os kms deste log mais recente
-                    myCars[carIndex].kilometers = finalLog.odometer
+                // 2. ATUALIZAR EFICIÊNCIA DESTE LOG (Com base no Futuro)
+                if nextLogIndex >= 0 {
+                    var nextLog = myCars[carIndex].fuelLogs[nextLogIndex]
+                    
+                    let distNext = nextLog.odometer - currentLog.odometer
+                    nextLog.distanceTraveled = distNext
+                    
+                    // Consumo DESTE log = (NivelFinalDeste - NivelInicialProximo) * Capacidade
+                    let levelAfterCurr = currentLog.fuelLevelAfter ?? (currentLog.isFullTank ? 1.0 : 0)
+                    let levelBeforeNext = nextLog.fuelLevelBefore
+                    
+                    var consumedNext = 0.0
+                    
+                    if carCapacity > 0 && levelAfterCurr > 0 {
+                        let pctUsed = max(0, levelAfterCurr - levelBeforeNext)
+                        consumedNext = pctUsed * carCapacity
+                    }
+                    
+                    if consumedNext == 0 && nextLog.isFullTank {
+                        consumedNext = nextLog.liters
+                    }
+                    
+                    if distNext > 0 && consumedNext > 0 {
+                        currentLog.efficiency = (consumedNext / distNext) * 100
+                    } else {
+                        currentLog.efficiency = nil
+                    }
+                    
+                    myCars[carIndex].fuelLogs[nextLogIndex] = nextLog
+                } else {
+                    currentLog.efficiency = nil
                 }
-                // Se editarmos um log antigo (não o primeiro), não atualizamos os kms atuais do carro
-                // porque o carro já deve ter kms superiores de logs mais recentes.
+                
+                myCars[carIndex].fuelLogs[logIndex] = currentLog
+                
+                if logIndex == 0 {
+                    myCars[carIndex].kilometers = currentLog.odometer
+                }
                 
                 dataStore.saveCars(myCars)
             }
@@ -208,6 +290,16 @@ class AppViewModel {
             }
         }
         return data
+    }
+    
+    func getColorForSpeed(kmh: Double) -> Color {
+        switch kmh {
+        case 0...60: return .green
+        case 60.001...90: return .blue
+        case 90.001...120: return .yellow
+        case 120.001...150: return .orange
+        default: return .red
+        }
     }
 }
 

@@ -8,18 +8,26 @@ struct EditFuelView: View {
     var logToEdit: FuelLog
     var tankCapacity: Double
     
-    enum Field { case odometer, liters, price, total }
+    enum Field { case odometer, trip, liters, price, total }
     @FocusState private var focusedField: Field?
+    
+    // MODO DE ENTRADA
+    enum InputMode: String, CaseIterable {
+        case odometer = "Total Odometer"
+        case trip = "Trip Distance"
+    }
+    @State private var inputMode: InputMode = .odometer
     
     @State private var date: Date
     @State private var odometer: String
+    @State private var tripDistance: String // Novo estado
     @State private var liters: String
     @State private var pricePerLiter: String
     @State private var totalCost: String
     @State private var selectedFuelType: String
     @State private var fuelLevelBefore: Double
     @State private var isFullTank: Bool
-    @State private var showTankLevel: Bool // <--- NOVO
+    @State private var showTankLevel: Bool
     
     let fuelTypes = ["Petrol", "Diesel", "Electric", "Hybrid", "LPG"]
     
@@ -31,14 +39,20 @@ struct EditFuelView: View {
         
         _date = State(initialValue: log.date)
         _odometer = State(initialValue: String(Int(log.odometer)))
+        
+        // Inicializa a distância de viagem se existir
+        if let dist = log.distanceTraveled {
+            _tripDistance = State(initialValue: String(format: "%.1f", dist))
+        } else {
+            _tripDistance = State(initialValue: "")
+        }
+        
         _liters = State(initialValue: String(format: "%.2f", log.liters))
         _pricePerLiter = State(initialValue: String(format: "%.3f", log.pricePerLiter))
         _totalCost = State(initialValue: String(format: "%.2f", log.totalCost))
         _selectedFuelType = State(initialValue: log.fuelType)
         _fuelLevelBefore = State(initialValue: log.fuelLevelBefore)
         _isFullTank = State(initialValue: log.isFullTank)
-        
-        // Se fuelLevelAfter existir, assumimos que o utilizador estava a usar essa feature
         _showTankLevel = State(initialValue: log.fuelLevelAfter != nil)
     }
     
@@ -47,9 +61,34 @@ struct EditFuelView: View {
             Form {
                 Section(header: Text("General Info")) {
                     DatePicker("Date", selection: $date, displayedComponents: [.date, .hourAndMinute])
-                    TextField("Odometer (km)", text: $odometer)
-                        .keyboardType(.numberPad)
-                        .focused($focusedField, equals: .odometer)
+                    
+                    Picker("Input Mode", selection: $inputMode) {
+                        ForEach(InputMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.vertical, 5)
+                    
+                    if inputMode == .odometer {
+                        TextField("Odometer (km)", text: $odometer)
+                            .keyboardType(.numberPad)
+                            .focused($focusedField, equals: .odometer)
+                    } else {
+                        HStack {
+                            Text("Trip Distance")
+                            Spacer()
+                            TextField("e.g. 500", text: $tripDistance)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .focused($focusedField, equals: .trip)
+                                .foregroundStyle(.blue)
+                        }
+                        // Nota explicativa
+                        Text("Edits to trip distance will adjust the total odometer relative to the previous log.")
+                            .font(.caption2)
+                            .foregroundStyle(.gray)
+                    }
                 }
                 
                 Section(header: Text("Fuel Details")) {
@@ -66,7 +105,6 @@ struct EditFuelView: View {
                     }
                 }
                 
-                // Só mostra se o toggle estiver ativo
                 if showTankLevel {
                     Section {
                         VStack(alignment: .leading) {
@@ -148,10 +186,27 @@ struct EditFuelView: View {
     func saveChanges() {
         let finalLevel = calculateLevelAfter()
         
+        // CALCULA ODÓMETRO FINAL
+        var finalOdometer: Double = 0.0
+        
+        if inputMode == .odometer {
+            finalOdometer = Double(odometer) ?? 0
+        } else {
+            // MODO EDIÇÃO INTELIGENTE
+            // Se estamos a editar por "Trip Distance", precisamos saber o odómetro base.
+            // Base = OdómetroRegistado - DistânciaRegistada
+            let oldTotal = logToEdit.odometer
+            let oldTrip = logToEdit.distanceTraveled ?? 0
+            let baseOdometer = oldTotal - oldTrip
+            
+            let newTrip = Double(tripDistance.replacingOccurrences(of: ",", with: ".")) ?? 0
+            finalOdometer = baseOdometer + newTrip
+        }
+        
         let updatedLog = FuelLog(
             id: logToEdit.id,
             date: date,
-            odometer: Double(odometer) ?? 0,
+            odometer: finalOdometer,
             liters: Double(liters.replacingOccurrences(of: ",", with: ".")) ?? 0,
             pricePerLiter: Double(pricePerLiter.replacingOccurrences(of: ",", with: ".")) ?? 0,
             totalCost: Double(totalCost.replacingOccurrences(of: ",", with: ".")) ?? 0,

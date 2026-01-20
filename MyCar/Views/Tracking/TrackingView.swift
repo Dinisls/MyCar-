@@ -4,193 +4,165 @@ import MapKit
 struct TrackingView: View {
     @Bindable var viewModel: AppViewModel
     
+    // Para animação do botão de Start
+    @State private var isPulsing = false
+    
     var body: some View {
-        ZStack(alignment: .top) {
-            
-            // 1. MAPA (Fundo)
-            Map(position: .constant(.region(viewModel.locationManager.currentRegion))) {
-                if !viewModel.locationManager.routePoints.isEmpty {
-                    MapPolyline(coordinates: viewModel.locationManager.routePoints.map { $0.coordinate })
-                        .stroke(currentSpeedColor, lineWidth: 5)
-                }
-                // Bolinha azul do utilizador
-                UserAnnotation(coordinate: viewModel.locationManager.currentRegion.center)
-            }
-            .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
-            .ignoresSafeArea()
-            
-            // 2. PAINEL DE CONTROLO SUPERIOR (HUD)
-            VStack(spacing: 0) {
+        NavigationStack {
+            ZStack(alignment: .bottom) {
                 
-                // --- LINHA 1: ESTATÍSTICAS (Velocidade, Tempo, Distância) ---
-                HStack(alignment: .center, spacing: 15) {
-                    
-                    // Velocidade (Esquerda)
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text("\(Int(viewModel.locationManager.currentSpeed * 3.6))")
-                            .font(.system(size: 38, weight: .black, design: .rounded))
-                            .foregroundStyle(currentSpeedColor)
-                            .contentTransition(.numericText())
-                        
-                        Text("km/h")
-                            .font(.subheadline)
-                            .foregroundStyle(.gray)
-                    }
-                    
-                    Spacer()
-                    
-                    // Separador Vertical
-                    Rectangle().fill(.gray.opacity(0.3)).frame(width: 1, height: 30)
-                    
-                    Spacer()
-                    
-                    // Stats (Direita)
-                    HStack(spacing: 20) {
-                        // Tempo
-                        VStack(alignment: .trailing, spacing: 0) {
-                            Text(formatDuration(viewModel.currentDuration))
-                                .font(.headline.monospacedDigit())
-                            Text("Time")
-                                .font(.caption2).foregroundStyle(.gray)
-                        }
-                        
-                        // Distância
-                        VStack(alignment: .trailing, spacing: 0) {
-                            Text(String(format: "%.1f", viewModel.locationManager.totalDistance / 1000))
-                                .font(.headline.monospacedDigit())
-                            Text("km")
-                                .font(.caption2).foregroundStyle(.gray)
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                // 1. O MAPA (Ecrã Inteiro)
+                // ALTERAÇÃO: .ignoresSafeArea() sem argumentos faz o mapa ir até ao fundo do ecrã
+                Map(coordinateRegion: $viewModel.locationManager.currentRegion, showsUserLocation: true, userTrackingMode: .constant(.follow))
+                    .ignoresSafeArea()
                 
-                // --- DIVISÓRIA ---
-                Divider()
-                    .background(Color.gray.opacity(0.3))
-                
-                // --- LINHA 2: SELETOR DE CARRO (DROPDOWN) ---
-                Menu {
-                    // Opção para conduzir sem carro específico
-                    Button {
-                        viewModel.currentTripCar = nil
-                    } label: {
-                        Label("No specific car", systemImage: "car")
+                // 2. CONTROLOS FLUTUANTES
+                VStack(spacing: 20) {
+                    
+                    // A: Estatísticas (Só aparecem se estiver a gravar)
+                    if viewModel.isTracking {
+                        HStack(spacing: 30) {
+                            VStack {
+                                Text("\(Int(viewModel.locationManager.currentSpeed * 3.6))")
+                                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.blue)
+                                Text("km/h")
+                                    .font(.caption)
+                                    .foregroundStyle(.gray)
+                            }
+                            
+                            Divider().frame(height: 40)
+                            
+                            VStack {
+                                Text(formatDuration(viewModel.currentDuration))
+                                    .font(.title2.bold())
+                                    .fontDesign(.monospaced)
+                                Text("Duration")
+                                    .font(.caption)
+                                    .foregroundStyle(.gray)
+                            }
+                            
+                            Divider().frame(height: 40)
+                            
+                            VStack {
+                                Text(String(format: "%.1f", viewModel.locationManager.totalDistance / 1000))
+                                    .font(.title2.bold())
+                                    .foregroundStyle(.primary)
+                                Text("km")
+                                    .font(.caption)
+                                    .foregroundStyle(.gray)
+                            }
+                        }
+                        .padding()
+                        .background(.thickMaterial)
+                        .cornerRadius(20)
+                        .shadow(radius: 10)
+                        .padding(.horizontal)
                     }
                     
-                    // Lista dos carros da Garagem
-                    ForEach(viewModel.myCars) { car in
-                        Button {
-                            viewModel.currentTripCar = car
-                        } label: {
-                            Label("\(car.make) \(car.model)", systemImage: "car.side.fill")
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        if let car = viewModel.currentTripCar {
-                            // Carro Selecionado
-                            Image(systemName: "car.side.fill")
-                                .foregroundStyle(.blue)
-                            Text("\(car.make) \(car.model)")
-                                .font(.headline)
-                                .foregroundStyle(.primary)
+                    // B: Seletor de Carro (Se não estiver a gravar)
+                    if !viewModel.isTracking {
+                        if viewModel.myCars.isEmpty {
+                            Text("Add a car in Garage to start")
+                                .font(.caption.bold())
+                                .foregroundStyle(.red)
+                                .padding(8)
+                                .background(.thinMaterial)
+                                .cornerRadius(8)
                         } else {
-                            // Nenhum selecionado
-                            Image(systemName: "car.fill")
-                                .foregroundStyle(.gray)
-                            Text("Select Vehicle")
-                                .font(.subheadline)
-                                .foregroundStyle(.gray)
+                            Menu {
+                                ForEach(viewModel.myCars) { car in
+                                    Button("\(car.make) \(car.model)") {
+                                        viewModel.currentTripCar = car
+                                    }
+                                }
+                            } label: {
+                                HStack {
+                                    Image(systemName: "car.fill")
+                                    Text(viewModel.currentTripCar == nil ? "Select Car" : "\(viewModel.currentTripCar!.make) \(viewModel.currentTripCar!.model)")
+                                    Image(systemName: "chevron.up")
+                                }
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 24)
+                                .background(Color.blue)
+                                .clipShape(Capsule())
+                                .shadow(radius: 5)
+                            }
                         }
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(.gray)
+                    } else {
+                        // Durante a viagem
+                        if let car = viewModel.currentTripCar {
+                            HStack {
+                                Image(systemName: "car.fill")
+                                    .foregroundStyle(.gray)
+                                Text("\(car.make) \(car.model)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                            }
+                            .padding(8)
+                            .background(.thinMaterial)
+                            .cornerRadius(8)
+                        }
                     }
-                    .padding(.vertical, 10)
-                    .contentShape(Rectangle()) // Torna toda a área clicável
+                    
+                    // C: BOTÃO START / STOP
+                    Button(action: {
+                        withAnimation(.spring()) {
+                            if viewModel.isTracking {
+                                viewModel.stopTrip()
+                            } else {
+                                viewModel.startTrip(with: viewModel.currentTripCar)
+                            }
+                        }
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(viewModel.isTracking ? Color.red : Color.green)
+                                .frame(width: 80, height: 80)
+                                .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
+                            
+                            if !viewModel.isTracking {
+                                Circle()
+                                    .stroke(Color.green.opacity(0.5), lineWidth: 4)
+                                    .frame(width: 90, height: 90)
+                                    .scaleEffect(isPulsing ? 1.1 : 1.0)
+                                    .opacity(isPulsing ? 0 : 1)
+                                    .onAppear {
+                                        withAnimation(.easeOut(duration: 1.5).repeatForever(autoreverses: false)) {
+                                            isPulsing = true
+                                        }
+                                    }
+                            }
+                            
+                            Image(systemName: viewModel.isTracking ? "stop.fill" : "play.fill")
+                                .font(.largeTitle)
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .disabled(viewModel.myCars.isEmpty && !viewModel.isTracking)
+                    // ALTERAÇÃO: Adicionei padding extra no fundo (60) para que os botões
+                    // fiquem acima da Tab Bar (Menu) e não escondidos atrás dela.
+                    .padding(.bottom, 60)
                 }
             }
-            .background(.thinMaterial) // Vidro fosco
-            .clipShape(RoundedRectangle(cornerRadius: 20)) // Cantos arredondados
-            .shadow(radius: 10)
-            .padding(.horizontal, 20)
-            .padding(.top, 10) // Margem do topo do ecrã
+            .navigationTitle("Tracking")
+            // Mapa ignora topo e fundo (ecrã total)
+            .toolbarBackground(.hidden, for: .navigationBar)
             
-            
-            // BARRA DE PROGRESSO FINA (Apenas visual, fora do painel)
-            if viewModel.isTracking {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.gray.opacity(0.3))
-                        Capsule()
-                            .fill(currentSpeedColor)
-                            .frame(width: min(geo.size.width * (viewModel.locationManager.currentSpeed * 3.6 / 200.0), geo.size.width))
-                            .animation(.linear, value: viewModel.locationManager.currentSpeed)
-                    }
-                }
-                .frame(height: 4)
-                .padding(.horizontal, 40)
-                .padding(.top, 5) // Ajustado para não bater no painel novo
-            }
-            
-            Spacer()
-            
-            // 3. BOTÃO START/STOP (Fundo)
-            VStack {
-                Spacer() // Empurra para baixo
-                Button(action: {
-                    handleStartStop()
-                }) {
-                    HStack {
-                        Image(systemName: viewModel.isTracking ? "stop.fill" : "play.fill")
-                        Text(viewModel.isTracking ? "STOP" : "START")
-                    }
-                    .font(.title3.bold())
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 55)
-                    .background(viewModel.isTracking ? Color.red : Color.green)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: (viewModel.isTracking ? Color.red : Color.green).opacity(0.4), radius: 10, y: 5)
-                }
-                .padding(30)
-                .padding(.bottom, 20)
-            }
+            // ALTERAÇÃO: Define a Tab Bar como visível mas com material translúcido
+            // Isto permite ver o mapa desfocado por trás dos ícones de baixo
+            .toolbarBackground(.visible, for: .tabBar)
+            .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         }
     }
     
-    // Lógica Simplificada (Já não precisa do popup)
-    func handleStartStop() {
-        withAnimation {
-            if viewModel.isTracking {
-                viewModel.stopTrip()
-            } else {
-                // Inicia a viagem com o carro que estiver selecionado no menu lá em cima
-                viewModel.startTrip(with: viewModel.currentTripCar)
-            }
-        }
-    }
-    
-    // Cor dinâmica
-    var currentSpeedColor: Color {
-        let speed = viewModel.locationManager.currentSpeed * 3.6
-        if speed <= 60 { return .green }
-        if speed <= 90 { return .blue }
-        if speed <= 120 { return .yellow }
-        if speed <= 150 { return .orange }
-        return .red
-    }
-    
-    func formatDuration(_ totalSeconds: TimeInterval) -> String {
-        let hours = Int(totalSeconds) / 3600
-        let minutes = (Int(totalSeconds) % 3600) / 60
-        let seconds = Int(totalSeconds) % 60
-        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+    func formatDuration(_ duration: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .positional
+        formatter.zeroFormattingBehavior = .pad
+        return formatter.string(from: duration) ?? "00:00"
     }
 }

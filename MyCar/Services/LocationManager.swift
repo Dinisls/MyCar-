@@ -1,93 +1,71 @@
 import Foundation
 import CoreLocation
-import MapKit
-import SwiftUI
+import MapKit // <--- IMPORTANTE: Necessário para MKCoordinateRegion
 
 @Observable
 class LocationManager: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     
-    // Estado atual
-    var currentSpeed: Double = 0.0 // m/s
+    // Dados da Rota
+    var routePoints: [RoutePoint] = []
+    
+    // Dados em Tempo Real
+    var currentSpeed: Double = 0.0
+    var totalDistance: Double = 0.0
+    
+    // --- CORREÇÃO DO ERRO ---
+    // Região do mapa para o SwiftUI seguir a localização
     var currentRegion = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 38.7223, longitude: -9.1393),
+        center: CLLocationCoordinate2D(latitude: 38.7223, longitude: -9.1393), // Default: Lisboa
         span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
     )
     
-    // Dados da sessão de gravação
-    var routePoints: [TripPoint] = []
-    var totalDistance: Double = 0.0
     private var lastLocation: CLLocation?
-    
-    // Controlo de gravação
-    var isRecording = false
     
     override init() {
         super.init()
         manager.delegate = self
-        
-        // --- CONFIGURAÇÃO CRÍTICA PARA BACKGROUND ---
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.distanceFilter = kCLDistanceFilterNone
-        
-        // Permite que o GPS funcione com a app minimizada
-        manager.allowsBackgroundLocationUpdates = true
-        
-        // Impede que o iOS pause o GPS se parares num semáforo
+        manager.allowsBackgroundLocationUpdates = true // Importante para tracking em background
         manager.pausesLocationUpdatesAutomatically = false
-        
-        // Pede autorização total ("Sempre" ou "Durante a utilização" com background ativo)
-        manager.requestAlwaysAuthorization()
-        
-        manager.startUpdatingLocation()
+        manager.requestWhenInUseAuthorization()
     }
     
     func startRecording() {
         routePoints = []
         totalDistance = 0
         lastLocation = nil
-        isRecording = true
+        manager.startUpdatingLocation()
     }
     
     func stopRecording() {
-        isRecording = false
-        currentSpeed = 0
+        manager.stopUpdatingLocation()
     }
     
-    // MARK: - Delegate
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         
-        // Ignora pontos muito antigos (ajuda na precisão inicial)
-        if location.timestamp.timeIntervalSinceNow < -5 { return }
-        // Ignora pontos com precisão muito má (acima de 50 metros)
-        if location.horizontalAccuracy > 50 { return }
+        // 1. Atualiza a Região do Mapa (Onde a câmara aponta)
+        currentRegion = MKCoordinateRegion(
+            center: location.coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.005, longitudeDelta: 0.005)
+        )
         
-        // Atualiza a UI
-        self.currentSpeed = max(0, location.speed)
-        
-        withAnimation {
-            self.currentRegion.center = location.coordinate
+        // 2. Calcula a distância e velocidade
+        if let last = lastLocation {
+            totalDistance += location.distance(from: last)
         }
+        lastLocation = location
+        currentSpeed = max(location.speed, 0) // Evita velocidades negativas
         
-        // Gravação
-        if isRecording {
-            let newPoint = TripPoint(
-                latitude: location.coordinate.latitude,
-                longitude: location.coordinate.longitude,
-                speed: location.speed,
-                timestamp: Date()
-            )
-            routePoints.append(newPoint)
-            
-            if let last = lastLocation {
-                totalDistance += location.distance(from: last)
-            }
-            lastLocation = location
-        }
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("❌ Erro GPS: \(error.localizedDescription)")
+        // 3. Guarda o ponto na rota
+        let newPoint = RoutePoint(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude,
+            timestamp: location.timestamp,
+            speed: max(location.speed, 0)
+        )
+        
+        routePoints.append(newPoint)
     }
 }

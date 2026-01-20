@@ -1,242 +1,293 @@
 import SwiftUI
 import MapKit
-import Charts
 
 struct TripDetailView: View {
     let trip: Trip
+    var viewModel: AppViewModel
     
-    // Estado para as Tags (apenas visual por agora)
-    @State private var tags: [String] = []
+    // Cálculos de tempo
+    var expectedTime: String {
+        let avgSpeedKmh = (trip.distance / 1000) / (trip.duration / 3600)
+        if avgSpeedKmh > 0 {
+            let expectedDuration = (trip.distance / 1000) / max(avgSpeedKmh, 50) * 3600
+            return formatDuration(expectedDuration)
+        }
+        return formatDuration(trip.duration)
+    }
+    
+    var actualTime: String {
+        formatDuration(trip.duration)
+    }
     
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                
-                // --- 1. MAPA ---
-                if !trip.points.isEmpty {
-                    ZStack(alignment: .bottomLeading) {
-                        MapInteractionView(points: trip.points)
-                            .frame(height: 350)
-                            .cornerRadius(0) // As fotos mostram o mapa a ocupar a largura toda
-                        
-                        // Legenda de Ranges (Overlay no fundo do mapa ou logo abaixo)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Speed Ranges")
-                                .font(.caption).bold().foregroundStyle(.blue)
-                            HStack { Circle().fill(.green).frame(width: 6); Text("0 - 60 km/h").font(.caption2).foregroundStyle(.gray) }
-                            HStack { Circle().fill(.blue).frame(width: 6); Text("61 - 90 km/h").font(.caption2).foregroundStyle(.gray) }
-                            HStack { Circle().fill(.yellow).frame(width: 6); Text("91 - 120 km/h").font(.caption2).foregroundStyle(.gray) }
-                            HStack { Circle().fill(.orange).frame(width: 6); Text("121 - 150 km/h").font(.caption2).foregroundStyle(.gray) }
-                            HStack { Circle().fill(.red).frame(width: 6); Text("> 150 km/h").font(.caption2).foregroundStyle(.gray) }
-                        }
-                        .padding()
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(10)
-                        .padding()
-                    }
+                // MAPA COM LINHAS COLORIDAS
+                ZStack(alignment: .topLeading) {
+                    TripMapView(trip: trip, viewModel: viewModel)
+                        .frame(height: 350)
+                        .cornerRadius(12)
+                    
+                    // Legenda de Velocidade
+                    SpeedLegendView()
+                        .padding(8)
+                        .background(.thinMaterial)
+                        .cornerRadius(8)
+                        .padding(10)
                 }
                 
-                VStack(spacing: 15) {
-                    
-                    // --- 2. COMPARAÇÃO DE TEMPO ---
-                    HStack {
-                        VStack {
-                            Text(formatDuration(trip.duration * 0.9)) // Simulado "Expected"
-                                .font(.title)
-                                .monospacedDigit()
-                            Text("Expected")
-                                .font(.caption).foregroundStyle(.gray)
-                        }
-                        
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.gray)
-                        
-                        VStack {
-                            Text(formatDuration(trip.duration))
-                                .font(.title)
-                                .monospacedDigit()
-                            Text("Actual")
-                                .font(.caption).foregroundStyle(.gray)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .cornerRadius(16)
-                    
-                    // --- 3. GRELHA DE ESTATÍSTICAS (4 Cartões) ---
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
-                        
-                        // Distância
-                        DashboardCard(
-                            value: String(format: "%.2f km", trip.distance / 1000),
-                            label: "Distance",
-                            icon: "road.lanes",
-                            iconColor: .blue
-                        )
-                        
-                        // Velocidade Média
-                        DashboardCard(
-                            value: String(format: "%.0f km/h", trip.averageSpeedKmh),
-                            label: "Avg Speed",
-                            icon: "speedometer",
-                            iconColor: .orange
-                        )
-                        
-                        // Velocidade Máxima
-                        DashboardCard(
-                            value: String(format: "%.0f km/h", trip.maxSpeedKmh),
-                            label: "Max Speed",
-                            icon: "gauge.with.dots.needle.100percent",
-                            iconColor: .red
-                        )
-                        
-                        // Red Zone Time
-                        DashboardCard(
-                            value: "\(Int(trip.redZoneDuration))s",
-                            label: "Red Zone Time\n> 150 km/h",
-                            icon: "bolt.fill",
-                            iconColor: .red
-                        )
-                    }
-                    
-                    // --- 4. GRÁFICO DE VELOCIDADE (SPEED OVER TIME) ---
-                    VStack(alignment: .leading) {
-                        Text("Speed Over Time")
-                            .font(.headline)
-                        
-                        Chart {
-                            ForEach(Array(trip.points.enumerated()), id: \.offset) { index, point in
-                                LineMark(
-                                    x: .value("Time", index), // Usando índice como tempo (segundos)
-                                    y: .value("Speed", point.speed * 3.6)
-                                )
-                                .foregroundStyle(.blue)
-                                .interpolationMethod(.catmullRom)
-                                
-                                AreaMark(
-                                    x: .value("Time", index),
-                                    y: .value("Speed", point.speed * 3.6)
-                                )
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.blue.opacity(0.5), .blue.opacity(0.0)],
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                            }
-                        }
-                        .chartYAxis { AxisMarks(position: .trailing) }
-                        .chartXAxis { AxisMarks(values: .automatic) } // Simplificado
-                        .frame(height: 200)
-                    }
-                    .padding()
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .cornerRadius(16)
-                    
-                    // --- 5. TAGS ---
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Tags").font(.headline)
-                            Spacer()
-                            Button(action: {}) {
-                                Label("Add Tag", systemImage: "plus.circle")
-                            }
-                        }
-                        
-                        if tags.isEmpty {
-                            Text("No tags yet")
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 12)
-                                .background(Color.gray.opacity(0.3))
-                                .cornerRadius(8)
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-                    }
-                    .padding()
-                    .background(Color(uiColor: .secondarySystemBackground))
-                    .cornerRadius(16)
-                    
+                // Cartões de Tempo
+                HStack(spacing: 12) {
+                    TimeCard(title: "Expected", time: expectedTime, icon: "arrow.forward.circle")
+                    TimeCard(title: "Actual", time: actualTime, icon: "timer")
                 }
-                .padding()
+                .padding(.horizontal)
+                
+                // Grelha de Estatísticas
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
+                    StatCard(
+                        title: "Distance",
+                        value: String(format: "%.2f km", trip.distance / 1000),
+                        icon: "road.lanes",
+                        color: .blue
+                    )
+                    
+                    StatCard(
+                        title: "Avg Speed",
+                        value: String(format: "%.0f km/h", trip.avgSpeedKmh),
+                        icon: "speedometer",
+                        color: .orange
+                    )
+                    
+                    StatCard(
+                        title: "Max Speed",
+                        value: String(format: "%.0f km/h", trip.maxSpeedKmh),
+                        icon: "dial.high.fill",
+                        color: .red
+                    )
+                    
+                    // Cálculo simples de tempo na "Red Zone" (>150km/h)
+                    let redZoneMinutes = trip.points.filter { ($0.speed * 3.6) > 150 }.count
+                    StatCard(
+                        title: "Red Zone Time",
+                        value: "\(redZoneMinutes)s",
+                        icon: "bolt.fill",
+                        color: .red
+                    )
+                }
+                .padding(.horizontal)
+                
+                if let carName = trip.carName {
+                    Text("Car: \(carName)")
+                        .font(.footnote)
+                        .foregroundStyle(.gray)
+                        .padding(.top)
+                }
             }
+            .padding(.bottom)
         }
-        .background(Color.black)
-        .navigationTitle("Trip History")
+        .navigationTitle("Trip Details")
         .navigationBarTitleDisplayMode(.inline)
     }
     
     func formatDuration(_ duration: TimeInterval) -> String {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .positional
         formatter.zeroFormattingBehavior = .pad
         return formatter.string(from: duration) ?? "00:00:00"
     }
 }
 
-// Subview para os Cartões Pretos
-struct DashboardCard: View {
-    let value: String
-    let label: String
-    let icon: String
-    let iconColor: Color
+// MARK: - CUSTOM MAP COMPONENTS
+
+class ColoredPolyline: MKPolyline {
+    var color: UIColor = .blue
+}
+
+struct TripMapView: UIViewRepresentable {
+    let trip: Trip
+    var viewModel: AppViewModel
     
-    var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(iconColor)
-            
-            VStack(spacing: 5) {
-                Text(value)
-                    .font(.title3.bold())
-                    .foregroundStyle(.white)
-                
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.gray)
-                    .multilineTextAlignment(.center)
-            }
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView()
+        mapView.delegate = context.coordinator
+        mapView.isUserInteractionEnabled = true
+        
+        if let first = trip.points.first, let last = trip.points.last {
+            let midLat = (first.latitude + last.latitude) / 2
+            let midLon = (first.longitude + last.longitude) / 2
+            let center = CLLocationCoordinate2D(latitude: midLat, longitude: midLon)
+            let span = MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            mapView.setRegion(MKCoordinateRegion(center: center, span: span), animated: false)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 20)
-        .background(Color(uiColor: .secondarySystemBackground))
-        .cornerRadius(16)
+        
+        return mapView
+    }
+    
+    func updateUIView(_ uiView: MKMapView, context: Context) {
+        uiView.removeOverlays(uiView.overlays)
+        uiView.removeAnnotations(uiView.annotations)
+        
+        guard trip.points.count > 1 else { return }
+        
+        var polylines: [ColoredPolyline] = []
+        var mapRect = MKMapRect.null
+        
+        for i in 0..<(trip.points.count - 1) {
+            let p1 = trip.points[i]
+            let p2 = trip.points[i+1]
+            
+            let coords = [p1.coordinate, p2.coordinate]
+            let speedKmh = p1.speed * 3.6
+            let swiftUIColor = viewModel.getColorForSpeed(kmh: speedKmh)
+            let uiColor = UIColor(swiftUIColor)
+            
+            let polyline = ColoredPolyline(coordinates: coords, count: 2)
+            polyline.color = uiColor
+            polylines.append(polyline)
+            
+            mapRect = mapRect.union(polyline.boundingMapRect)
+        }
+        
+        uiView.addOverlays(polylines)
+        
+        if let start = trip.points.first {
+            let startAnnotation = MKPointAnnotation()
+            startAnnotation.coordinate = start.coordinate
+            startAnnotation.title = "Start"
+            uiView.addAnnotation(startAnnotation)
+        }
+        
+        if let end = trip.points.last {
+            let endAnnotation = MKPointAnnotation()
+            endAnnotation.coordinate = end.coordinate
+            endAnnotation.title = "End"
+            uiView.addAnnotation(endAnnotation)
+        }
+        
+        if !mapRect.isNull {
+            uiView.setVisibleMapRect(mapRect, edgePadding: UIEdgeInsets(top: 50, left: 50, bottom: 50, right: 50), animated: true)
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: TripMapView
+        
+        init(_ parent: TripMapView) {
+            self.parent = parent
+        }
+        
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let coloredPolyline = overlay as? ColoredPolyline {
+                let renderer = MKPolylineRenderer(polyline: coloredPolyline)
+                renderer.strokeColor = coloredPolyline.color
+                renderer.lineWidth = 4
+                renderer.lineCap = .round
+                renderer.lineJoin = .round
+                return renderer
+            }
+            return MKOverlayRenderer(overlay: overlay)
+        }
+        
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation.title == "Start" {
+                let view = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: "start")
+                view.markerTintColor = .green
+                view.glyphImage = UIImage(systemName: "flag.fill")
+                return view
+            } else if annotation.title == "End" {
+                let view = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: "end")
+                view.markerTintColor = .red
+                view.glyphImage = UIImage(systemName: "flag.checkered")
+                return view
+            }
+            return nil
+        }
     }
 }
 
-// Subview do Mapa (Atualizada para linha verde)
-struct MapInteractionView: View {
-    let points: [TripPoint]
+// MARK: - SUBVIEWS
+
+struct SpeedLegendView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Speed Ranges")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+            // CORREÇÃO: Usar TripLegendItem para evitar conflito com StatsView
+            TripLegendItem(color: .green, text: "0 - 60 km/h")
+            TripLegendItem(color: .blue, text: "61 - 90 km/h")
+            TripLegendItem(color: .yellow, text: "91 - 120 km/h")
+            TripLegendItem(color: .orange, text: "121 - 150 km/h")
+            TripLegendItem(color: .red, text: "> 150 km/h")
+        }
+    }
+}
+
+// Mudei o nome para evitar conflito com StatsView
+struct TripLegendItem: View {
+    let color: Color
+    let text: String
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(text).font(.caption2).foregroundStyle(.white)
+        }
+    }
+}
+
+struct TimeCard: View {
+    let title: String
+    let time: String
+    let icon: String
     
     var body: some View {
-        let coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-        
-        Map {
-            MapPolyline(coordinates: coordinates)
-                .stroke(Color.green, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-            
-            if let start = coordinates.first {
-                Annotation("Start", coordinate: start) {
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.title)
-                        .foregroundStyle(.green)
-                        .background(Circle().fill(.white))
-                }
+        VStack(spacing: 10) {
+            Text(time)
+                .font(.title2.bold())
+                .fontDesign(.monospaced)
+            HStack {
+                Image(systemName: icon)
+                Text(title)
             }
+            .font(.caption)
+            .foregroundStyle(.gray)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground))
+        .cornerRadius(12)
+    }
+}
+
+struct StatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundStyle(color)
             
-            if let end = coordinates.last {
-                Annotation("End", coordinate: end) {
-                    Image(systemName: "flag.circle.fill")
-                        .font(.title)
-                        .foregroundStyle(.red)
-                        .background(Circle().fill(.white))
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.title3.bold())
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.gray)
             }
         }
-        .mapStyle(.standard(elevation: .realistic))
-        .colorScheme(.dark) // Força o mapa escuro como na foto
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground))
+        .cornerRadius(12)
     }
 }

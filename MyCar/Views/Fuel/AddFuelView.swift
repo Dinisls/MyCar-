@@ -11,12 +11,20 @@ struct AddFuelView: View {
     var tankCapacity: Double
     
     // Identificadores de foco
-    enum Field { case odometer, liters, price, total }
+    enum Field { case odometer, trip, liters, price, total }
     @FocusState private var focusedField: Field?
+    
+    // MODO DE ENTRADA (Total ou Parcial)
+    enum InputMode: String, CaseIterable {
+        case odometer = "Total Odometer"
+        case trip = "Trip Distance"
+    }
+    @State private var inputMode: InputMode = .odometer
     
     // Estados do Formulário
     @State private var date = Date()
     @State private var odometer: String = ""
+    @State private var tripDistance: String = "" // Novo campo para distância parcial
     @State private var selectedFuelType = "Petrol"
     
     // Estados de Combustível
@@ -26,7 +34,7 @@ struct AddFuelView: View {
     
     // Estados de Tanque
     @State private var isFullTank: Bool = true
-    @State private var showTankLevel: Bool = false // <--- NOVO TOGGLE (Desligado por defeito)
+    @State private var showTankLevel: Bool = false
     @State private var fuelLevelBefore: Double = 0.25
     
     let fuelTypes = ["Petrol", "Diesel", "Electric", "Hybrid", "LPG"]
@@ -49,13 +57,49 @@ struct AddFuelView: View {
                 Section(header: Text("General Info")) {
                     DatePicker("Date", selection: $date, displayedComponents: [.date, .hourAndMinute])
                     
-                    HStack {
-                        Text("Odometer (km)")
-                        Spacer()
-                        TextField("Km", text: $odometer)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .focused($focusedField, equals: .odometer)
+                    // SELETOR: Total vs Trip
+                    Picker("Input Mode", selection: $inputMode) {
+                        ForEach(InputMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.vertical, 5)
+                    
+                    if inputMode == .odometer {
+                        // MODO 1: Odómetro Total
+                        HStack {
+                            Text("Odometer (km)")
+                            Spacer()
+                            TextField("Total Km", text: $odometer)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .focused($focusedField, equals: .odometer)
+                        }
+                    } else {
+                        // MODO 2: Distância da Viagem
+                        HStack {
+                            Text("Trip Distance (+)")
+                            Spacer()
+                            TextField("e.g. 500", text: $tripDistance)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .focused($focusedField, equals: .trip)
+                                .foregroundStyle(.blue)
+                        }
+                        
+                        // Mostra o cálculo automático
+                        if let tripVal = Double(tripDistance.replacingOccurrences(of: ",", with: ".")), tripVal > 0 {
+                            HStack {
+                                Text("New Total:")
+                                    .font(.caption)
+                                    .foregroundStyle(.gray)
+                                Spacer()
+                                Text("\(Int(currentKm + tripVal)) km")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.gray)
+                            }
+                        }
                     }
                 }
                 
@@ -105,13 +149,12 @@ struct AddFuelView: View {
                         Text("Full Tank")
                     }
                     
-                    // NOVO TOGGLE: Mostrar ou esconder níveis
                     Toggle(isOn: $showTankLevel) {
-                        Text("Track Tank Level") // "Definir nível do tanque"
+                        Text("Track Tank Level")
                     }
                 }
                 
-                // SEÇÃO 4: Níveis (Só aparece se o toggle estiver ativo)
+                // SEÇÃO 4: Níveis
                 if showTankLevel {
                     Section(header: Text("Tank Levels")) {
                         VStack(alignment: .leading) {
@@ -184,17 +227,27 @@ struct AddFuelView: View {
     }
     
     func saveLog() {
-        // Se o utilizador não quis controlar o nível, guardamos nil ou 0 no calculation
         let finalLevel = showTankLevel ? calculateLevelAfter() : nil
+        
+        // CALCULA O ODÓMETRO FINAL COM BASE NO MODO ESCOLHIDO
+        var finalOdometer: Double = 0.0
+        
+        if inputMode == .odometer {
+            finalOdometer = Double(odometer) ?? currentKm
+        } else {
+            // Se for Trip Distance, somamos ao atual
+            let trip = Double(tripDistance.replacingOccurrences(of: ",", with: ".")) ?? 0
+            finalOdometer = currentKm + trip
+        }
         
         let newLog = FuelLog(
             date: date,
-            odometer: Double(odometer) ?? currentKm,
+            odometer: finalOdometer, // Valor calculado
             liters: Double(liters.replacingOccurrences(of: ",", with: ".")) ?? 0,
             pricePerLiter: Double(pricePerLiter.replacingOccurrences(of: ",", with: ".")) ?? 0,
             totalCost: Double(totalCost.replacingOccurrences(of: ",", with: ".")) ?? 0,
             fuelType: selectedFuelType,
-            fuelLevelBefore: showTankLevel ? fuelLevelBefore : 0, // Guarda 0 se inativo
+            fuelLevelBefore: showTankLevel ? fuelLevelBefore : 0,
             fuelLevelAfter: finalLevel,
             isFullTank: isFullTank
         )

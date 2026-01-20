@@ -4,141 +4,161 @@ import Charts
 struct StatsView: View {
     var viewModel: AppViewModel
     
+    // Filtro de tempo selecionado
+    @State private var selectedTimeRange = "All Time"
+    let timeRanges = ["Week", "Month", "Year", "All Time"]
+    
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                
-                Text("Statistics")
-                    .font(.largeTitle.bold())
-                    .padding(.horizontal)
-                    .padding(.top)
-                
-                // --- 1. GRELHA DE 4 CARTÕES ---
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
                     
-                    // Distância Total
-                    StatsBigCard(
-                        value: String(format: "%.1f km", viewModel.totalDistanceAllTime / 1000),
-                        label: "Total Distance",
-                        icon: "road.lanes",
-                        iconColor: .blue
-                    )
-                    
-                    // Tempo Total
-                    StatsBigCard(
-                        value: formatSimpleDuration(viewModel.totalDurationAllTime),
-                        label: "Total Time",
-                        icon: "clock.fill",
-                        iconColor: .green
-                    )
-                    
-                    // Top Speed
-                    StatsBigCard(
-                        value: String(format: "%.0f km/h", viewModel.topSpeedAllTime),
-                        label: "Top Speed",
-                        icon: "speedometer",
-                        iconColor: .red
-                    )
-                    
-                    // Número de Viagens
-                    StatsBigCard(
-                        value: "\(viewModel.savedTrips.count)",
-                        label: "Trips",
-                        icon: "flag.checkered",
-                        iconColor: .yellow
-                    )
-                }
-                .padding(.horizontal)
-                
-                // --- 2. GRÁFICO DE DISTRIBUIÇÃO ---
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Speed Distribution")
-                        .font(.headline)
-                    
-                    if viewModel.savedTrips.isEmpty {
-                        Text("No data available yet.")
-                            .font(.caption).foregroundStyle(.gray).padding()
-                    } else {
-                        Chart(viewModel.speedDistribution) { item in
-                            BarMark(
-                                x: .value("Range", item.range),
-                                y: .value("Minutes", item.minutes)
-                            )
-                            .foregroundStyle(item.color) // Usa a cor definida no ViewModel
+                    // Seletor de Tempo
+                    Picker("Time Range", selection: $selectedTimeRange) {
+                        ForEach(timeRanges, id: \.self) { range in
+                            Text(range)
                         }
-                        .frame(height: 250)
-                        
-                        // Legenda Manual (como na foto)
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 15) {
-                                LegendItem(color: .green, text: "0-60")
-                                LegendItem(color: .blue, text: "61-90")
-                                LegendItem(color: .yellow, text: "91-120")
-                                LegendItem(color: .orange, text: "121-150")
-                                LegendItem(color: .red, text: "151+")
-                            }
-                        }
-                        .padding(.top, 5)
                     }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    
+                    // 1. ESTATÍSTICAS GERAIS
+                    VStack(spacing: 15) {
+                        Text("Overview")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
+                            StatBox(
+                                title: "Total Distance",
+                                value: String(format: "%.0f km", viewModel.totalDistanceAllTime / 1000),
+                                icon: "road.lanes",
+                                color: .blue
+                            )
+                            
+                            StatBox(
+                                title: "Total Time",
+                                value: formatDuration(viewModel.totalDurationAllTime),
+                                icon: "clock.fill",
+                                color: .orange
+                            )
+                            
+                            StatBox(
+                                title: "Top Speed",
+                                value: String(format: "%.0f km/h", viewModel.topSpeedAllTime),
+                                icon: "trophy.fill",
+                                color: .yellow
+                            )
+                            
+                            StatBox(
+                                title: "Trips",
+                                value: "\(viewModel.savedTrips.count)",
+                                icon: "flag.checkered",
+                                color: .green
+                            )
+                        }
+                    }
+                    .padding()
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                    
+                    // 2. GRÁFICO DE DISTRIBUIÇÃO DE VELOCIDADE
+                    VStack(alignment: .leading, spacing: 15) {
+                        Text("Speed Distribution (Time spent)")
+                            .font(.headline)
+                        
+                        if viewModel.savedTrips.isEmpty {
+                            Text("No data available yet.")
+                                .foregroundStyle(.gray)
+                                .frame(height: 200)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            Chart(viewModel.speedDistribution) { item in
+                                SectorMark(
+                                    angle: .value("Minutes", item.minutes),
+                                    innerRadius: .ratio(0.6),
+                                    angularInset: 2
+                                )
+                                .foregroundStyle(item.color)
+                                .cornerRadius(5)
+                            }
+                            .frame(height: 250)
+                            
+                            // Legenda
+                            VStack(alignment: .leading, spacing: 8) {
+                                // CORREÇÃO: Usamos o novo nome StatsLegendItem
+                                StatsLegendItem(color: .green, text: "0 - 60 km/h (City)")
+                                StatsLegendItem(color: .blue, text: "61 - 90 km/h (Road)")
+                                StatsLegendItem(color: .yellow, text: "91 - 120 km/h (Highway)")
+                                StatsLegendItem(color: .orange, text: "121 - 150 km/h (Fast)")
+                                StatsLegendItem(color: .red, text: "> 150 km/h (Extreme)")
+                            }
+                            .padding(.top, 10)
+                        }
+                    }
+                    .padding()
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .cornerRadius(12)
+                    .padding(.horizontal)
                 }
-                .padding()
-                .background(Color(uiColor: .secondarySystemBackground))
-                .cornerRadius(16)
-                .padding(.horizontal)
+                .padding(.vertical)
             }
-            .padding(.bottom, 30)
+            .navigationTitle("Statistics")
         }
-        .background(Color.black)
-        // Removemos o navigationTitle padrão para usarmos o Text("Statistics") grande personalizado
-        .navigationBarTitleDisplayMode(.inline)
     }
     
-    func formatSimpleDuration(_ totalSeconds: TimeInterval) -> String {
-        let hours = Int(totalSeconds) / 3600
-        let minutes = (Int(totalSeconds) % 3600) / 60
-        return "\(hours)h \(minutes)m"
+    func formatDuration(_ duration: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute]
+        formatter.unitsStyle = .abbreviated
+        return formatter.string(from: duration) ?? "0h"
     }
 }
 
-// Cartão Grande para a Stats View
-struct StatsBigCard: View {
+// MARK: - SUBVIEWS
+
+struct StatBox: View {
+    let title: String
     let value: String
-    let label: String
     let icon: String
-    let iconColor: Color
+    let color: Color
     
     var body: some View {
-        VStack(spacing: 15) {
+        VStack(alignment: .leading, spacing: 10) {
             Image(systemName: icon)
                 .font(.title2)
-                .foregroundStyle(iconColor)
+                .foregroundStyle(color)
             
-            VStack(spacing: 5) {
+            VStack(alignment: .leading) {
                 Text(value)
-                    .font(.title2.bold()) // Texto ligeiramente maior
-                    .foregroundStyle(.white)
-                
-                Text(label)
+                    .font(.title3.bold())
+                Text(title)
                     .font(.caption)
                     .foregroundStyle(.gray)
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 110) // Altura fixa para ficarem quadrados
-        .background(Color(uiColor: .secondarySystemBackground))
-        .cornerRadius(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(uiColor: .systemBackground))
+        .cornerRadius(10)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
-// Item da Legenda
-struct LegendItem: View {
+// CORREÇÃO: Nome alterado para evitar conflito com TripDetailView
+struct StatsLegendItem: View {
     let color: Color
     let text: String
     
     var body: some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text(text).font(.caption).foregroundStyle(.gray)
+        HStack {
+            Circle()
+                .fill(color)
+                .frame(width: 10, height: 10)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

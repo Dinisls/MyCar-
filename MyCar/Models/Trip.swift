@@ -1,37 +1,45 @@
 import Foundation
+import CoreLocation
 
 struct Trip: Identifiable, Codable {
     var id = UUID()
-    let points: [TripPoint]
+    let points: [RoutePoint]
     let startTime: Date
     let endTime: Date
-    let distance: Double // Distância total em metros
-    let carName: String?
+    let distance: Double // em metros
+    var carName: String?
     
-    // --- PROPRIEDADES CALCULADAS ---
-    
-    // 1. Duração da viagem (Segundos)
+    // Duração calculada
     var duration: TimeInterval {
         return endTime.timeIntervalSince(startTime)
     }
     
-    // 2. Velocidade Média (km/h)
-    var averageSpeedKmh: Double {
+    // --- NOVAS PROPRIEDADES CALCULADAS (Correção do erro) ---
+    
+    // Velocidade Média em km/h
+    var avgSpeedKmh: Double {
         guard duration > 0 else { return 0 }
-        return (distance / duration) * 3.6
+        let hours = duration / 3600
+        let km = distance / 1000
+        return km / hours
     }
     
-    // 3. Velocidade Máxima (km/h)
+    // Velocidade Máxima em km/h
     var maxSpeedKmh: Double {
-        let maxSpeedMps = points.map { $0.speed }.max() ?? 0
-        return maxSpeedMps > 0 ? (maxSpeedMps * 3.6) : 0
+        // Os pontos guardam velocidade em m/s, convertemos para km/h (* 3.6)
+        let maxMps = points.map { $0.speed }.max() ?? 0
+        return maxMps * 3.6
     }
+}
+
+// Estrutura auxiliar para guardar pontos da rota (GeoJSON simplificado)
+struct RoutePoint: Codable {
+    let latitude: Double
+    let longitude: Double
+    let timestamp: Date
+    let speed: Double // m/s
     
-    // 4. Tempo na "Red Zone" (> 150 km/h)  <-- AQUI ESTÁ O CÓDIGO QUE PEDISTE
-    var redZoneDuration: TimeInterval {
-        // Filtra os pontos onde a velocidade (convertida para km/h) é > 150
-        let highSpeedPoints = points.filter { ($0.speed * 3.6) > 150 }
-        // Como gravamos 1 ponto por segundo, o count é igual aos segundos
-        return TimeInterval(highSpeedPoints.count)
+    var coordinate: CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
 }
