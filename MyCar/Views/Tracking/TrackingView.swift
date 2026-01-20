@@ -7,14 +7,35 @@ struct TrackingView: View {
     // Para animação do botão de Start
     @State private var isPulsing = false
     
+    // PREMIUM: Estados para controlo
+    @State private var showPaywall = false
+    @ObservedObject var premiumManager = PremiumManager.shared
+    
+    // MAPA: Estado para controlar a câmara do mapa (iOS 17+)
+    @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
+    
     var body: some View {
         NavigationStack {
             ZStack(alignment: .bottom) {
                 
-                // 1. O MAPA (Ecrã Inteiro)
-                // ALTERAÇÃO: .ignoresSafeArea() sem argumentos faz o mapa ir até ao fundo do ecrã
-                Map(coordinateRegion: $viewModel.locationManager.currentRegion, showsUserLocation: true, userTrackingMode: .constant(.follow))
-                    .ignoresSafeArea()
+                // 1. O MAPA (Atualizado para iOS 17)
+                Map(position: $position) {
+                    // Mostra a localização atual do utilizador
+                    UserAnnotation()
+                    
+                    // Opcional: Desenhar a linha do percurso em tempo real
+                    if viewModel.isTracking && !viewModel.locationManager.routePoints.isEmpty {
+                        MapPolyline(coordinates: viewModel.locationManager.routePoints.map(\.coordinate))
+                            .stroke(.blue, lineWidth: 5)
+                    }
+                }
+                // Controlos padrão do mapa
+                .mapControls {
+                    MapUserLocationButton()
+                    MapCompass()
+                    MapScaleView()
+                }
+                .ignoresSafeArea()
                 
                 // 2. CONTROLOS FLUTUANTES
                 VStack(spacing: 20) {
@@ -107,13 +128,20 @@ struct TrackingView: View {
                         }
                     }
                     
-                    // C: BOTÃO START / STOP
+                    // C: BOTÃO START / STOP (COM LÓGICA PREMIUM)
                     Button(action: {
-                        withAnimation(.spring()) {
-                            if viewModel.isTracking {
+                        if viewModel.isTracking {
+                            // PARAR: Sempre permitido
+                            withAnimation(.spring()) {
                                 viewModel.stopTrip()
+                            }
+                        } else {
+                            // INICIAR: Verifica limites
+                            if premiumManager.canStartTrip() {
+                                startTripAction()
                             } else {
-                                viewModel.startTrip(with: viewModel.currentTripCar)
+                                // Bloqueado -> Mostra Paywall
+                                showPaywall = true
                             }
                         }
                     }) {
@@ -142,8 +170,7 @@ struct TrackingView: View {
                         }
                     }
                     .disabled(viewModel.myCars.isEmpty && !viewModel.isTracking)
-                    // ALTERAÇÃO: Adicionei padding extra no fundo (60) para que os botões
-                    // fiquem acima da Tab Bar (Menu) e não escondidos atrás dela.
+                    // Padding extra no fundo para não ficar atrás da Tab Bar
                     .padding(.bottom, 60)
                 }
             }
@@ -151,10 +178,30 @@ struct TrackingView: View {
             // Mapa ignora topo e fundo (ecrã total)
             .toolbarBackground(.hidden, for: .navigationBar)
             
-            // ALTERAÇÃO: Define a Tab Bar como visível mas com material translúcido
-            // Isto permite ver o mapa desfocado por trás dos ícones de baixo
+            // Define a Tab Bar como visível mas com material translúcido
             .toolbarBackground(.visible, for: .tabBar)
             .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        }
+        // SHEET DA PAYWALL
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(onSuccess: {
+                // Se viu o anúncio com sucesso, inicia a viagem
+                startTripAction()
+            })
+        }
+    }
+    
+    // Função auxiliar para iniciar a viagem e contar uso gratuito
+    func startTripAction() {
+        withAnimation(.spring()) {
+            // Se não for premium, gastamos uma "ficha" gratuita
+            if !premiumManager.isPremium {
+                premiumManager.incrementTripCount()
+            }
+            
+            viewModel.startTrip(with: viewModel.currentTripCar)
+            // Recentrar no utilizador ao iniciar
+            position = .userLocation(fallback: .automatic)
         }
     }
     

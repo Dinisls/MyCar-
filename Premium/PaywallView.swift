@@ -2,9 +2,9 @@ import SwiftUI
 
 struct PaywallView: View {
     @Environment(\.dismiss) var dismiss
-    @ObservedObject var manager = PremiumManager.shared
+    var manager = PremiumManager.shared
     
-    // O que o utilizador quer fazer depois de desbloquear (ex: iniciar viagem)
+    // O que fazer após sucesso (ex: iniciar viagem)
     var onSuccess: () -> Void
     
     @State private var isLoading = false
@@ -37,28 +37,44 @@ struct PaywallView: View {
             
             // OPÇÕES DE COMPRA
             VStack(spacing: 12) {
+                // PLANO ANUAL (30€ / ano -> 2.50€ / mês)
                 Button(action: {
                     manager.buyYearly()
                     dismiss()
                 }) {
-                    VStack {
-                        Text("Plano Anual - 25,00 € / ano")
+                    VStack(spacing: 4) {
+                        Text("Plano Anual - 30,00 € / ano")
                             .bold()
-                        Text("Poupe com o pagamento anual")
+                            .font(.headline)
+                        
+                        // TEXTO ALTERADO AQUI PARA DAR DESTAQUE
+                        Text("Apenas 2,50 € / mês")
+                            .font(.subheadline)
+                            .fontWeight(.semibold) // Negrito suave para destacar
+                            .foregroundStyle(.white) // Garante que brilha
+                            
+                        Text("(Poupe 37%)")
                             .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
                     .background(Color.blue)
                     .foregroundStyle(.white)
                     .cornerRadius(12)
+                    // Adiciona uma borda dourada para destacar que é a "Melhor oferta"
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.yellow, lineWidth: 2)
+                    )
                 }
                 
+                // PLANO MENSAL (3.99€)
                 Button(action: {
                     manager.buyMonthly()
                     dismiss()
                 }) {
-                    Text("Plano Mensal - 2,99 € / mês")
+                    Text("Plano Mensal - 3,99 € / mês")
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.blue.opacity(0.1))
@@ -70,13 +86,13 @@ struct PaywallView: View {
             
             Divider().padding(.vertical)
             
-            // OPÇÃO DE ANÚNCIO (Uma vez)
+            // OPÇÃO DE ANÚNCIO
             Button(action: {
                 isLoading = true
                 manager.watchAd { success in
                     isLoading = false
                     if success {
-                        onSuccess() // Executa a ação (ex: inicia viagem)
+                        onSuccess()
                         dismiss()
                     }
                 }
@@ -86,7 +102,7 @@ struct PaywallView: View {
                 } else {
                     HStack {
                         Image(systemName: "play.tv.fill")
-                        Text("Ver Anúncio (Uso Único)")
+                        Text("Ver Anúncio para Desbloquear")
                     }
                     .foregroundStyle(.gray)
                     .font(.subheadline)

@@ -7,6 +7,10 @@ struct FuelHistoryView: View {
     @State private var showingAddFuel = false
     @State private var logToEdit: FuelLog?
     
+    // PREMIUM: Estados para controlo
+    @State private var showPaywall = false
+    @ObservedObject var premiumManager = PremiumManager.shared
+    
     var body: some View {
         List {
             // 1. SECÇÃO DE RESUMO (Topo)
@@ -58,7 +62,22 @@ struct FuelHistoryView: View {
         .navigationTitle("Fuel History")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showingAddFuel = true } label: { Image(systemName: "plus") }
+                // BOTÃO ADICIONAR (COM LÓGICA PREMIUM)
+                Button {
+                    if premiumManager.canAddFuelLog() {
+                        // Se puder adicionar, abre a sheet
+                        // Contamos o uso se não for premium
+                        if !premiumManager.isPremium {
+                            premiumManager.incrementFuelLogCount()
+                        }
+                        showingAddFuel = true
+                    } else {
+                        // Se não puder, mostra Paywall
+                        showPaywall = true
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
             }
         }
         // SHEET 1: ADICIONAR
@@ -71,14 +90,21 @@ struct FuelHistoryView: View {
                 tankCapacity: car.tankCapacity
             )
         }
-        // SHEET 2: EDITAR (O erro estava aqui, faltava tankCapacity)
+        // SHEET 2: EDITAR
         .sheet(item: $logToEdit) { log in
             EditFuelView(
                 viewModel: viewModel,
                 carID: car.id,
                 log: log,
-                tankCapacity: car.tankCapacity // <--- Corrigido aqui
+                tankCapacity: car.tankCapacity
             )
+        }
+        // SHEET 3: PAYWALL
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(onSuccess: {
+                // Se viu o anúncio com sucesso, abre a sheet de adicionar
+                showingAddFuel = true
+            })
         }
     }
     
@@ -87,7 +113,7 @@ struct FuelHistoryView: View {
     }
 }
 
-// MARK: - COMPONENTES VISUAIS
+// MARK: - COMPONENTES VISUAIS (Mantêm-se iguais)
 
 struct SummaryCard: View {
     let title: String
