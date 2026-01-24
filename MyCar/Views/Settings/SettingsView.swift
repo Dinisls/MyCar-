@@ -12,6 +12,10 @@ struct SettingsView: View {
     @State private var isRestoring = false
     @State private var restoreAlertShowing = false
     
+    // EXPORTAR (Backup)
+    @State private var showShareSheet = false
+    @State private var filesToShare: [URL] = []
+    
     // IMPORTAR (Restore)
     @State private var isImporting = false
     @State private var importAlertMessage = ""
@@ -64,13 +68,12 @@ struct SettingsView: View {
                 
                 // --- BACKUP & RESTORE DE DADOS ---
                 Section("Backup & Data") {
-                    // 1. EXPORTAR (VERSÃO MODERNA - iOS 16+)
-                    // Isto resolve o problema do ecrã preto
-                    ShareLink(items: getExportURLs()) {
+                    // 1. EXPORTAR
+                    Button {
+                        exportData()
+                    } label: {
                         Label("Export Data (Backup)", systemImage: "square.and.arrow.up")
                     }
-                    // Desativa o botão se não houver ficheiros para exportar
-                    .disabled(getExportURLs().isEmpty)
                     
                     // 2. IMPORTAR
                     Button {
@@ -116,6 +119,9 @@ struct SettingsView: View {
             
             .sheet(isPresented: $showPaywall) {
                 PaywallView(onSuccess: { })
+            }
+            .sheet(isPresented: $showShareSheet) {
+                ShareSheet(activityItems: filesToShare)
             }
             
             // --- FILE IMPORTER (O Seletor de Ficheiros) ---
@@ -178,8 +184,8 @@ struct SettingsView: View {
         }
     }
     
-    // MARK: - HELPER EXPORTAR (Devolve URLs para o ShareLink)
-    func getExportURLs() -> [URL] {
+    // MARK: - HELPER EXPORTAR
+    func exportData() {
         let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let tripsUrl = docsURL.appendingPathComponent("trips_v1.json")
         let carsUrl = docsURL.appendingPathComponent("my_cars_v1.json")
@@ -188,7 +194,13 @@ struct SettingsView: View {
         if FileManager.default.fileExists(atPath: tripsUrl.path) { items.append(tripsUrl) }
         if FileManager.default.fileExists(atPath: carsUrl.path) { items.append(carsUrl) }
         
-        return items
+        if !items.isEmpty {
+            filesToShare = items
+            showShareSheet = true
+        } else {
+            importAlertMessage = "No data to export yet."
+            showImportAlert = true
+        }
     }
     
     func formatDate(_ timestamp: Double) -> String {
@@ -197,4 +209,16 @@ struct SettingsView: View {
         formatter.dateStyle = .medium
         return formatter.string(from: date)
     }
+}
+
+// Helper para o Menu de Partilha
+struct ShareSheet: UIViewControllerRepresentable {
+    var activityItems: [Any]
+    var applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
