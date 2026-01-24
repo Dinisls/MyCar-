@@ -5,19 +5,12 @@
 //  Created by Dinis Santos on 16/01/2026.
 //
 
-
 import SwiftUI
 
 struct FuelGeneralStatsView: View {
     @Bindable var viewModel: AppViewModel
     
-    // Selecionamos o primeiro carro por defeito, ou criamos lógica para escolher
-    // Para simplificar, vamos assumir que mostramos do primeiro carro ou pedimos para selecionar antes
-    // Neste exemplo, vamos mostrar uma lista de carros para entrar no Dashboard individual
-    
     var body: some View {
-        // Se houver carros, mostra a lista para entrar no dashboard individual
-        // Se quisesses ir direto, precisarias de passar o 'Car' para esta View
         Group {
             if viewModel.myCars.isEmpty {
                 ContentUnavailableView("No Cars", systemImage: "car", description: Text("Add a car first."))
@@ -43,7 +36,7 @@ struct FuelGeneralStatsView: View {
     }
 }
 
-// --- DASHBOARD INDIVIDUAL (Igual à IMG_4913) ---
+// --- DASHBOARD INDIVIDUAL ---
 struct CarFuelDashboard: View {
     let car: Car
     
@@ -70,21 +63,9 @@ struct CarFuelDashboard: View {
                 .background(Color(uiColor: .secondarySystemBackground))
                 .cornerRadius(16)
                 
-                // 2. Postos de Combustível (Placeholder Visual - IMG_4913)
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Gas Stations Nearby")
-                        .font(.headline)
-                    HStack {
-                        StationCircle(logo: "A", name: "Auchan", price: "1.509 €")
-                        StationCircle(logo: "C", name: "Cepsa", price: "1.469 €")
-                        StationCircle(logo: "G", name: "Galp", price: "1.589 €")
-                    }
-                }
-                .padding()
-                .background(Color(uiColor: .secondarySystemBackground))
-                .cornerRadius(16)
+                // (SECÇÃO DE POSTOS REMOVIDA AQUI)
                 
-                // 3. Resumo de Combustível (Dados Reais)
+                // 2. Resumo de Combustível (Dados Reais)
                 VStack(alignment: .leading, spacing: 15) {
                     Text("Fuel Summary")
                         .font(.headline)
@@ -115,7 +96,7 @@ struct CarFuelDashboard: View {
                 .background(Color(uiColor: .secondarySystemBackground))
                 .cornerRadius(16)
                 
-                // 4. Botões de Navegação (Estatísticas e Gráficos)
+                // 3. Botões de Navegação (Estatísticas e Gráficos)
                 VStack(spacing: 10) {
                     NavigationLink(destination: FuelDetailedStatsView(car: car)) {
                         HStack {
@@ -170,22 +151,6 @@ struct CarFuelDashboard: View {
 }
 
 // Subviews Visuais
-struct StationCircle: View {
-    let logo: String
-    let name: String
-    let price: String
-    
-    var body: some View {
-        VStack {
-            Circle().fill(.white).frame(width: 50, height: 50)
-                .overlay(Text(logo).foregroundStyle(.black).bold())
-            Text(name).font(.caption2).bold()
-            Text(price).font(.caption)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
 struct StatsRowItem: View {
     let icon: String
     let color: Color

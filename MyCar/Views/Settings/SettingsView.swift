@@ -8,11 +8,11 @@ struct SettingsView: View {
     @State private var showResetAlert = false
     @State private var showPaywall = false
     
-    // Feedback de restore
+    // Feedback de restore compra
     @State private var isRestoring = false
     @State private var restoreAlertShowing = false
     
-    // IMPORTAR (Restore)
+    // IMPORTAR (Restore Dados)
     @State private var isImporting = false
     @State private var importAlertMessage = ""
     @State private var showImportAlert = false
@@ -62,21 +62,25 @@ struct SettingsView: View {
                     .disabled(isRestoring)
                 }
                 
-                // --- BACKUP & RESTORE DE DADOS ---
+                // --- BACKUP & RESTORE DE DADOS (NOVO SINGLE FILE) ---
                 Section("Backup & Data") {
-                    // 1. EXPORTAR (VERSÃO MODERNA - iOS 16+)
-                    // Isto resolve o problema do ecrã preto
-                    ShareLink(items: getExportURLs()) {
-                        Label("Export Data (Backup)", systemImage: "square.and.arrow.up")
-                    }
-                    // Desativa o botão se não houver ficheiros para exportar
-                    .disabled(getExportURLs().isEmpty)
                     
-                    // 2. IMPORTAR
+                    // 1. EXPORTAR TUDO (1 Ficheiro)
+                    // O ShareLink chama a função createUnifiedBackup que devolve o URL do ficheiro único
+                    if let backupURL = viewModel.createUnifiedBackup() {
+                        ShareLink(item: backupURL) {
+                            Label("Export Full Backup", systemImage: "archivebox.circle.fill")
+                        }
+                    } else {
+                        // Fallback se algo falhar
+                        Text("Error creating backup").foregroundStyle(.red)
+                    }
+                    
+                    // 2. IMPORTAR TUDO
                     Button {
                         isImporting = true
                     } label: {
-                        Label("Import Data (Restore)", systemImage: "square.and.arrow.down")
+                        Label("Import Backup File", systemImage: "arrow.down.doc.fill")
                     }
                     
                     // 3. APAGAR
@@ -118,77 +122,35 @@ struct SettingsView: View {
                 PaywallView(onSuccess: { })
             }
             
-            // --- FILE IMPORTER (O Seletor de Ficheiros) ---
+            // --- FILE IMPORTER (Agora aceita 1 ficheiro JSON) ---
             .fileImporter(
                 isPresented: $isImporting,
-                allowedContentTypes: [.json], // Só aceita JSON
-                allowsMultipleSelection: true // Podes selecionar Carros e Viagens ao mesmo tempo
+                allowedContentTypes: [.json],
+                allowsMultipleSelection: false // Só 1 ficheiro
             ) { result in
                 do {
-                    let selectedUrls = try result.get()
-                    importFiles(urls: selectedUrls)
+                    // Segurança: Aceder ao ficheiro fora da Sandbox
+                    let selectedUrl = try result.get().first!
+                    guard selectedUrl.startAccessingSecurityScopedResource() else { return }
+                    defer { selectedUrl.stopAccessingSecurityScopedResource() }
+                    
+                    // Tentar Restaurar
+                    let success = viewModel.restoreUnifiedBackup(from: selectedUrl)
+                    
+                    if success {
+                        importAlertMessage = "Backup loaded successfully!"
+                    } else {
+                        importAlertMessage = "Invalid backup file. Make sure you selected a MyCar_Backup.json file."
+                    }
+                    showImportAlert = true
+                    
                 } catch {
                     print("Erro ao importar: \(error)")
+                    importAlertMessage = "Error reading file."
+                    showImportAlert = true
                 }
             }
         }
-    }
-    
-    // MARK: - LÓGICA DE IMPORTAÇÃO
-    func importFiles(urls: [URL]) {
-        let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        var importCount = 0
-        
-        for url in urls {
-            // 1. Pedir permissão de segurança para ler o ficheiro fora da app
-            guard url.startAccessingSecurityScopedResource() else { continue }
-            
-            defer { url.stopAccessingSecurityScopedResource() }
-            
-            // 2. Definir o destino (substituir o ficheiro existente)
-            let fileName = url.lastPathComponent
-            let destinationURL = docsURL.appendingPathComponent(fileName)
-            
-            // Só importamos se tiver o nome correto para evitar corrupção
-            if fileName == "trips_v1.json" || fileName == "my_cars_v1.json" {
-                do {
-                    // Remove o antigo se existir
-                    if FileManager.default.fileExists(atPath: destinationURL.path) {
-                        try FileManager.default.removeItem(at: destinationURL)
-                    }
-                    // Copia o novo
-                    try FileManager.default.copyItem(at: url, to: destinationURL)
-                    importCount += 1
-                } catch {
-                    print("❌ Falha ao copiar \(fileName): \(error)")
-                }
-            } else {
-                print("⚠️ Ficheiro ignorado (nome incorreto): \(fileName)")
-            }
-        }
-        
-        if importCount > 0 {
-            // 3. Atualizar a App
-            viewModel.reloadData()
-            importAlertMessage = "Success! \(importCount) files imported."
-            showImportAlert = true
-        } else {
-            importAlertMessage = "No valid backup files found. Make sure filenames are 'trips_v1.json' or 'my_cars_v1.json'."
-            showImportAlert = true
-        }
-    }
-    
-    // MARK: - HELPER EXPORTAR (Devolve URLs para o ShareLink)
-    func getExportURLs() -> [URL] {
-        let docsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let tripsUrl = docsURL.appendingPathComponent("trips_v1.json")
-        let carsUrl = docsURL.appendingPathComponent("my_cars_v1.json")
-        
-        var items: [URL] = []
-        if FileManager.default.fileExists(atPath: tripsUrl.path) { items.append(tripsUrl) }
-        if FileManager.default.fileExists(atPath: carsUrl.path) { items.append(carsUrl) }
-        
-        return items
     }
     
     func formatDate(_ timestamp: Double) -> String {
