@@ -14,18 +14,28 @@ class AppViewModel {
     var locationManager = LocationManager()
     private var dataStore = DataStore()
     
+    // Dados da App
     var savedTrips: [Trip] = []
+    var myCars: [Car] = []
+    
+    // Estado do Tracking
     var isTracking = false
     var trackStartTime: Date?
     var currentDuration: TimeInterval = 0
     private var timer: Timer?
     var currentTripCar: Car?
     
-    var myCars: [Car] = []
-    
     init() {
         savedTrips = dataStore.loadTrips()
         myCars = dataStore.loadCars()
+    }
+    
+    // MARK: - IMPORT / EXPORT HELPER (NOVO)
+    func reloadData() {
+        // Esta função é chamada depois de importares um backup para atualizar o ecrã
+        self.savedTrips = dataStore.loadTrips()
+        self.myCars = dataStore.loadCars()
+        print("🔄 Dados recarregados com sucesso!")
     }
     
     // MARK: - GESTÃO DA GARAGEM
@@ -46,7 +56,7 @@ class AppViewModel {
         }
     }
     
-    // MARK: - GESTÃO DE COMBUSTÍVEL (LÓGICA CORRIGIDA: NÍVEL DO TANQUE)
+    // MARK: - GESTÃO DE COMBUSTÍVEL
     
     func addFuelLog(_ log: FuelLog, to carID: UUID) {
         if let index = myCars.firstIndex(where: { $0.id == carID }) {
@@ -56,46 +66,39 @@ class AppViewModel {
             // O novo log começa sem eficiência (será calculada quando houver um próximo)
             newLog.efficiency = nil
             
-            // Verifica se existe log anterior
+            // Verifica se existe log anterior para calcular distância e consumo
             if let previousLog = myCars[index].fuelLogs.first {
                 
-                // 1. Calcula distância percorrida
+                // 1. Calcula distância percorrida desde o último abastecimento
                 let dist = newLog.odometer - previousLog.odometer
                 newLog.distanceTraveled = dist
                 
-                // 2. CÁLCULO DO CONSUMO (A LÓGICA QUE PEDISTE)
-                // Vamos calcular quantos litros foram realmente "queimados" com base na diferença de nível do tanque.
-                
+                // 2. CÁLCULO DO CONSUMO REAL
                 var consumedLiters: Double = 0.0
                 
-                // Recuperamos o nível com que o carro ficou DEPOIS do abastecimento anterior
-                // Se não tiver registo, assumimos 1.0 (Cheio) se foi marcado como Full, ou 0 se não sabemos.
+                // Nível do tanque LOGO APÓS o abastecimento anterior (ex: 1.0 se encheu)
                 let levelAfterPrev = previousLog.fuelLevelAfter ?? (previousLog.isFullTank ? 1.0 : 0)
                 
-                // O nível com que chegaste AGORA à bomba (ex: 0.50 ou 50%)
+                // Nível do tanque AGORA ANTES de abastecer (ex: 0.25)
                 let levelBeforeCurr = newLog.fuelLevelBefore
                 
-                // Se o carro tiver capacidade definida e os níveis forem válidos
                 if carCapacity > 0 && levelAfterPrev > 0 {
-                    // Diferença: Saiu com 100%, Chegou com 50% -> Gastou 50%
+                    // Diferença: Saiu com 100%, Chegou com 25% -> Gastou 75%
                     let percentageUsed = max(0, levelAfterPrev - levelBeforeCurr)
                     consumedLiters = percentageUsed * carCapacity
                     
-                    // SEGURANÇA:
-                    // Se o cálculo pelos níveis der zero (ex: o utilizador esqueceu-se dos sliders),
-                    // e o utilizador atestou agora (Full Tank), usamos os litros da bomba como fallback.
+                    // Fallback: Se o cálculo der zero mas o utilizador encheu o tanque agora, usa os litros da bomba
                     if consumedLiters == 0 && newLog.isFullTank {
                         consumedLiters = newLog.liters
                     }
                 } else {
-                    // Se não temos capacidade do tanque configurada, usamos a lógica antiga (Litros da Bomba)
-                    // Mas apenas se for Tanque Cheio, senão não conseguimos adivinhar.
+                    // Sem capacidade definida, só calculamos se for Tanque Cheio (método clássico)
                     if newLog.isFullTank {
                         consumedLiters = newLog.liters
                     }
                 }
                 
-                // 3. Atualiza a eficiência do log ANTERIOR
+                // 3. Atualiza a eficiência do log ANTERIOR (porque o consumo aconteceu ANTES deste abastecimento)
                 if dist > 0 && consumedLiters > 0 {
                     let efficiency = (consumedLiters / dist) * 100
                     myCars[index].fuelLogs[0].efficiency = efficiency
@@ -105,7 +108,7 @@ class AppViewModel {
             // Insere o novo log
             myCars[index].fuelLogs.insert(newLog, at: 0)
             
-            // Atualiza KMs
+            // Atualiza KMs totais do carro
             if newLog.odometer > myCars[index].kilometers {
                 myCars[index].kilometers = newLog.odometer
             }
@@ -137,8 +140,8 @@ class AppViewModel {
                 var currentLog = updatedLog
                 let carCapacity = myCars[carIndex].tankCapacity
                 
-                let nextLogIndex = logIndex - 1 // Futuro
-                let prevLogIndex = logIndex + 1 // Passado
+                let nextLogIndex = logIndex - 1 // Futuro (Log mais recente)
+                let prevLogIndex = logIndex + 1 // Passado (Log mais antigo)
                 
                 // 1. ATUALIZAR ESTE LOG (Com base no Passado)
                 if prevLogIndex < myCars[carIndex].fuelLogs.count {
@@ -147,7 +150,6 @@ class AppViewModel {
                     currentLog.distanceTraveled = dist
                     
                     // RECALCULAR EFICIÊNCIA DO ANTERIOR
-                    // Baseado nos níveis: (NivelFinalAnterior - NivelInicialDeste) * Capacidade
                     let levelAfterPrev = prevLog.fuelLevelAfter ?? (prevLog.isFullTank ? 1.0 : 0)
                     let levelBeforeCurr = currentLog.fuelLevelBefore
                     
@@ -157,7 +159,6 @@ class AppViewModel {
                         let pctUsed = max(0, levelAfterPrev - levelBeforeCurr)
                         consumedLiters = pctUsed * carCapacity
                     }
-                    // Fallback se os sliders falharem mas for tanque cheio
                     if consumedLiters == 0 && currentLog.isFullTank {
                         consumedLiters = currentLog.liters
                     }
@@ -175,7 +176,6 @@ class AppViewModel {
                     let distNext = nextLog.odometer - currentLog.odometer
                     nextLog.distanceTraveled = distNext
                     
-                    // Consumo DESTE log = (NivelFinalDeste - NivelInicialProximo) * Capacidade
                     let levelAfterCurr = currentLog.fuelLevelAfter ?? (currentLog.isFullTank ? 1.0 : 0)
                     let levelBeforeNext = nextLog.fuelLevelBefore
                     
@@ -203,6 +203,7 @@ class AppViewModel {
                 
                 myCars[carIndex].fuelLogs[logIndex] = currentLog
                 
+                // Se for o mais recente, atualiza o odómetro do carro
                 if logIndex == 0 {
                     myCars[carIndex].kilometers = currentLog.odometer
                 }
@@ -303,6 +304,7 @@ class AppViewModel {
     }
 }
 
+// MARK: - HELPERS DE CALENDÁRIO
 extension Calendar {
     func isDate(_ date: Date, equalTo otherDate: Date, toGranularity component: Calendar.Component) -> Bool {
         return compare(date, to: otherDate, toGranularity: component) == .orderedSame

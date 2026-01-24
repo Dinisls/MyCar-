@@ -140,9 +140,16 @@ class PremiumManager: NSObject, ObservableObject, FullScreenContentDelegate {
     }
     
     func buyYearly() {
-        // ID do Anual
+        // --- MODO DE TESTE (Bypass Pagamento) ---
+        // Isto simula uma compra bem sucedida instantaneamente
+        print("🔓 MODO DE TESTE: A ativar Premium gratuitamente...")
+        self.isPremium = true
+        
+        // --- CÓDIGO ORIGINAL (Comentado para testes) ---
+        /*
         guard let product = products.first(where: { $0.id == "com.ds99.mycar.yearly" }) else { return }
         purchase(product)
+        */
     }
     
     func purchase(_ product: Product) {
