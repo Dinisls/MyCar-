@@ -22,37 +22,48 @@ struct StatsView: View {
                     .pickerStyle(.segmented)
                     .padding(.horizontal)
                     
-                    // 1. ESTATÍSTICAS GERAIS
+                    // NOVO: Texto com as datas (Ex: 1 Jan - 1 Fev)
+                    Text(viewModel.getDateRangeString(for: selectedTimeRange))
+                        .font(.caption)
+                        .foregroundStyle(.gray)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    
+                    // 1. ESTATÍSTICAS GERAIS (Filtradas)
                     VStack(spacing: 15) {
                         Text("Overview")
                             .font(.headline)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 15) {
+                            
+                            // Distância Filtrada
                             StatBox(
-                                title: "Total Distance",
-                                value: String(format: "%.0f km", viewModel.totalDistanceAllTime / 1000),
+                                title: "Distance",
+                                value: String(format: "%.0f km", viewModel.getFilteredDistance(range: selectedTimeRange) / 1000),
                                 icon: "road.lanes",
                                 color: .blue
                             )
                             
+                            // Tempo Filtrado
                             StatBox(
                                 title: "Total Time",
-                                value: formatDuration(viewModel.totalDurationAllTime),
+                                value: formatDuration(viewModel.getFilteredDuration(range: selectedTimeRange)),
                                 icon: "clock.fill",
                                 color: .orange
                             )
                             
+                            // Velocidade Máxima Filtrada
                             StatBox(
                                 title: "Top Speed",
-                                value: String(format: "%.0f km/h", viewModel.topSpeedAllTime),
+                                value: String(format: "%.0f km/h", viewModel.getFilteredTopSpeed(range: selectedTimeRange)),
                                 icon: "trophy.fill",
                                 color: .yellow
                             )
                             
+                            // Contagem Filtrada
                             StatBox(
                                 title: "Trips",
-                                value: "\(viewModel.savedTrips.count)",
+                                value: "\(viewModel.getFilteredCount(range: selectedTimeRange))",
                                 icon: "flag.checkered",
                                 color: .green
                             )
@@ -63,18 +74,26 @@ struct StatsView: View {
                     .cornerRadius(12)
                     .padding(.horizontal)
                     
-                    // 2. GRÁFICO DE DISTRIBUIÇÃO DE VELOCIDADE
+                    // 2. GRÁFICO DE DISTRIBUIÇÃO (Filtrado)
                     VStack(alignment: .leading, spacing: 15) {
-                        Text("Speed Distribution (Time spent)")
+                        Text("Speed Distribution")
                             .font(.headline)
                         
-                        if viewModel.savedTrips.isEmpty {
-                            Text("No data available yet.")
-                                .foregroundStyle(.gray)
-                                .frame(height: 200)
-                                .frame(maxWidth: .infinity)
+                        let distData = viewModel.getSpeedDistribution(for: selectedTimeRange)
+                        let totalMinutes = distData.reduce(0) { $0 + $1.minutes }
+                        
+                        if totalMinutes == 0 {
+                            VStack {
+                                Image(systemName: "chart.bar.xaxis")
+                                    .font(.largeTitle)
+                                    .foregroundStyle(.gray)
+                                Text("No data for this period")
+                                    .foregroundStyle(.gray)
+                            }
+                            .frame(height: 200)
+                            .frame(maxWidth: .infinity)
                         } else {
-                            Chart(viewModel.speedDistribution) { item in
+                            Chart(distData) { item in
                                 SectorMark(
                                     angle: .value("Minutes", item.minutes),
                                     innerRadius: .ratio(0.6),
@@ -87,7 +106,6 @@ struct StatsView: View {
                             
                             // Legenda
                             VStack(alignment: .leading, spacing: 8) {
-                                // CORREÇÃO: Usamos o novo nome StatsLegendItem
                                 StatsLegendItem(color: .green, text: "0 - 60 km/h (City)")
                                 StatsLegendItem(color: .blue, text: "61 - 90 km/h (Road)")
                                 StatsLegendItem(color: .yellow, text: "91 - 120 km/h (Highway)")
@@ -133,6 +151,7 @@ struct StatBox: View {
             VStack(alignment: .leading) {
                 Text(value)
                     .font(.title3.bold())
+                    .minimumScaleFactor(0.8)
                 Text(title)
                     .font(.caption)
                     .foregroundStyle(.gray)
@@ -146,7 +165,6 @@ struct StatBox: View {
     }
 }
 
-// CORREÇÃO: Nome alterado para evitar conflito com TripDetailView
 struct StatsLegendItem: View {
     let color: Color
     let text: String

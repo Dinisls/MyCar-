@@ -62,11 +62,6 @@
 			path = MyCarUITests;
 			sourceTree = "<group>";
 		};
-		0AF597DC2F1FADAD00205A28 /* Premium */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Premium;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,7 +93,6 @@
 		0AD7383F2F1A846D00815F36 = {
 			isa = PBXGroup;
 			children = (
-				0AF597DC2F1FADAD00205A28 /* Premium */,
 				0AD7384A2F1A846D00815F36 /* MyCar */,
 				0AD738582F1A846E00815F36 /* MyCarTests */,
 				0AD738622F1A846E00815F36 /* MyCarUITests */,
@@ -133,7 +127,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				0AD7384A2F1A846D00815F36 /* MyCar */,
-				0AF597DC2F1FADAD00205A28 /* Premium */,
 			);
 			name = MyCar;
 			packageProductDependencies = (

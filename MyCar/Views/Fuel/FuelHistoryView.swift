@@ -7,10 +7,6 @@ struct FuelHistoryView: View {
     @State private var showingAddFuel = false
     @State private var logToEdit: FuelLog?
     
-    // PREMIUM: Estados para controlo
-    @State private var showPaywall = false
-    @ObservedObject var premiumManager = PremiumManager.shared
-    
     var body: some View {
         List {
             // 1. SECÇÃO DE RESUMO (Topo)
@@ -62,19 +58,9 @@ struct FuelHistoryView: View {
         .navigationTitle("Fuel History")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                // BOTÃO ADICIONAR (COM LÓGICA PREMIUM)
+                // BOTÃO ADICIONAR (LIVRE)
                 Button {
-                    if premiumManager.canAddFuelLog() {
-                        // Se puder adicionar, abre a sheet
-                        // Contamos o uso se não for premium
-                        if !premiumManager.isPremium {
-                            premiumManager.incrementFuelLogCount()
-                        }
-                        showingAddFuel = true
-                    } else {
-                        // Se não puder, mostra Paywall
-                        showPaywall = true
-                    }
+                    showingAddFuel = true
                 } label: {
                     Image(systemName: "plus")
                 }
@@ -98,13 +84,6 @@ struct FuelHistoryView: View {
                 log: log,
                 tankCapacity: car.tankCapacity
             )
-        }
-        // SHEET 3: PAYWALL
-        .sheet(isPresented: $showPaywall) {
-            PaywallView(onSuccess: {
-                // Se viu o anúncio com sucesso, abre a sheet de adicionar
-                showingAddFuel = true
-            })
         }
     }
     

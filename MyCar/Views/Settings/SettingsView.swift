@@ -3,14 +3,8 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     var viewModel: AppViewModel
-    @ObservedObject var premiumManager = PremiumManager.shared
     
     @State private var showResetAlert = false
-    @State private var showPaywall = false
-    
-    // Feedback de restore compra
-    @State private var isRestoring = false
-    @State private var restoreAlertShowing = false
     
     // IMPORTAR (Restore Dados)
     @State private var isImporting = false
@@ -20,48 +14,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                // --- SUBSCRIÇÃO ---
-                Section(header: Text("Subscription Status")) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(premiumManager.isPremium ? "Premium Active" : "Free Plan")
-                                .font(.headline)
-                                .foregroundStyle(premiumManager.isPremium ? .primary : .secondary)
-                            
-                            if premiumManager.isPremium {
-                                Text("Valid until: \(formatDate(premiumManager.premiumExpiryDate))")
-                                    .font(.caption)
-                                    .foregroundStyle(.green)
-                            } else {
-                                Text("Upgrade for unlimited trips & fuel logs")
-                                    .font(.caption)
-                                    .foregroundStyle(.gray)
-                            }
-                        }
-                        Spacer()
-                        if premiumManager.isPremium {
-                            Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue)
-                        } else {
-                            Button("Upgrade") { showPaywall = true }
-                                .buttonStyle(.borderedProminent)
-                                .font(.caption.bold())
-                        }
-                    }
-                    .padding(.vertical, 4)
-                    
-                    Button {
-                        isRestoring = true
-                        premiumManager.restorePurchases()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                            isRestoring = false
-                            restoreAlertShowing = true
-                        }
-                    } label: {
-                        if isRestoring { ProgressView() } else { Text("Restore Purchases").foregroundStyle(.blue) }
-                    }
-                    .disabled(isRestoring)
-                }
-                
                 // --- BACKUP & RESTORE DE DADOS (NOVO SINGLE FILE) ---
                 Section("Backup & Data") {
                     
@@ -112,16 +64,6 @@ struct SettingsView: View {
                 Text(importAlertMessage)
             }
             
-            .alert("Restore Completed", isPresented: $restoreAlertShowing) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text("We checked your Apple account for active subscriptions.")
-            }
-            
-            .sheet(isPresented: $showPaywall) {
-                PaywallView(onSuccess: { })
-            }
-            
             // --- FILE IMPORTER (Agora aceita 1 ficheiro JSON) ---
             .fileImporter(
                 isPresented: $isImporting,
@@ -151,12 +93,5 @@ struct SettingsView: View {
                 }
             }
         }
-    }
-    
-    func formatDate(_ timestamp: Double) -> String {
-        let date = Date(timeIntervalSince1970: timestamp)
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
     }
 }
