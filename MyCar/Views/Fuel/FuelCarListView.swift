@@ -1,7 +1,14 @@
 import SwiftUI
 
+// 1. Enum para controlar o destino da navegação
+enum FuelNavigationDestination {
+    case history
+    case stats
+}
+
 struct FuelCarListView: View {
     var viewModel: AppViewModel
+    var destination: FuelNavigationDestination
     
     var body: some View {
         VStack {
@@ -22,13 +29,12 @@ struct FuelCarListView: View {
                 // Lista de Carros
                 List {
                     ForEach(viewModel.myCars) { car in
-                        NavigationLink(destination: FuelHistoryView(viewModel: viewModel, car: car)) {
-                            FuelCarRow(car: car)
-                        }
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
-                        .padding(.vertical, 8)
-                        .listRowBackground(Color.clear)
+                        // Chamamos a função auxiliar aqui para "partir" a expressão
+                        carDestinationLink(for: car)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .padding(.vertical, 8)
+                            .listRowBackground(Color.clear)
                     }
                 }
                 .listStyle(.plain)
@@ -37,8 +43,28 @@ struct FuelCarListView: View {
         .navigationTitle("Select Vehicle")
         .background(Color.black)
     }
+    
+    // MARK: - Função Auxiliar (Resolve o erro do compilador)
+    // Esta função isola a lógica de decisão, facilitando o trabalho do Swift
+    @ViewBuilder
+    func carDestinationLink(for car: Car) -> some View {
+        switch destination {
+        case .history:
+            // Vai para o Histórico de Abastecimentos
+            NavigationLink(destination: FuelHistoryView(viewModel: viewModel, car: car)) {
+                FuelCarRow(car: car)
+            }
+        case .stats:
+            // Vai para o Dashboard de Estatísticas (Gráficos)
+            // Nota: Usa o CarFuelDashboard que definimos no FuelGeneralStatsView.swift
+            NavigationLink(destination: CarFuelDashboard(car: car)) {
+                FuelCarRow(car: car)
+            }
+        }
+    }
 }
 
+// Componente Visual da Linha (Mantém-se igual)
 struct FuelCarRow: View {
     let car: Car
     

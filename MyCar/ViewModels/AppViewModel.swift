@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 import CoreLocation
 
-// Estrutura para os Gráficos
+// Estrutura para os Gráficos de Velocidade
 struct SpeedDistributionData: Identifiable {
     var id = UUID()
     let range: String
@@ -10,6 +10,7 @@ struct SpeedDistributionData: Identifiable {
     var minutes: Double
 }
 
+// Estrutura para Backup
 struct BackupData: Codable {
     let version: String
     let timestamp: Date
@@ -125,6 +126,21 @@ class AppViewModel {
             }
         }
     }
+    
+    // MARK: - CÁLCULO DE MÉDIA REAL (CORREÇÃO)
+    func getRealAverageConsumption(for car: Car) -> Double {
+        let validLogs = car.fuelLogs.filter { ($0.distanceTraveled ?? 0) > 0 }
+        
+        guard !validLogs.isEmpty else { return 0.0 }
+        
+        let totalLiters = validLogs.reduce(0) { $0 + $1.liters }
+        let totalDistance = validLogs.reduce(0) { $0 + ($1.distanceTraveled ?? 0) }
+        
+        if totalDistance > 0 {
+            return (totalLiters / totalDistance) * 100
+        }
+        return 0.0
+    }
 
     // MARK: - BACKUP
     func createUnifiedBackup() -> URL? {
@@ -225,46 +241,35 @@ class AppViewModel {
         
         switch range {
         case "Week":
-            // Últimos 7 dias
             let weekAgo = calendar.date(byAdding: .day, value: -7, to: now)!
             return savedTrips.filter { $0.startTime >= weekAgo }
-            
         case "Month":
-            // Últimos 30 dias
             let monthAgo = calendar.date(byAdding: .day, value: -30, to: now)!
             return savedTrips.filter { $0.startTime >= monthAgo }
-            
         case "Year":
-            // Últimos 365 dias
             let yearAgo = calendar.date(byAdding: .year, value: -1, to: now)!
             return savedTrips.filter { $0.startTime >= yearAgo }
-            
         default: // "All Time"
             return savedTrips
         }
     }
     
-    // Retorna a distância total filtrada
     func getFilteredDistance(range: String) -> Double {
         return filteredTrips(for: range).reduce(0) { $0 + $1.distance }
     }
     
-    // Retorna a duração total filtrada
     func getFilteredDuration(range: String) -> TimeInterval {
         return filteredTrips(for: range).reduce(0) { $0 + $1.duration }
     }
     
-    // Retorna velocidade máxima filtrada
     func getFilteredTopSpeed(range: String) -> Double {
         return filteredTrips(for: range).map { $0.maxSpeedKmh }.max() ?? 0
     }
     
-    // Retorna contagem filtrada
     func getFilteredCount(range: String) -> Int {
         return filteredTrips(for: range).count
     }
     
-    // Retorna distribuição de velocidade filtrada
     func getSpeedDistribution(for range: String) -> [SpeedDistributionData] {
         let trips = filteredTrips(for: range)
         var data = [
@@ -305,12 +310,11 @@ class AppViewModel {
         }
     }
     
-    /// Retorna a string do intervalo (Ex: "02 jan. 2026 – 01 fev. 2026")
     func getDateRangeString(for range: String) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
-        formatter.locale = Locale.current // Usa o idioma do telemóvel
+        formatter.locale = Locale.current
         
         let now = Date()
         let calendar = Calendar.current
@@ -323,17 +327,41 @@ class AppViewModel {
             startDate = calendar.date(byAdding: .day, value: -30, to: now) ?? now
         case "Year":
             startDate = calendar.date(byAdding: .year, value: -1, to: now) ?? now
-        default: // "All Time"
-            // Se "Tudo", usa a data da viagem mais antiga (a última do array, pois inserimos no início)
+        default:
             if let oldest = savedTrips.last {
                 startDate = oldest.startTime
             } else {
-                // Se não houver viagens, mostramos algo genérico ou vazio
                 return "No data"
             }
         }
-        
         return "\(formatter.string(from: startDate)) – \(formatter.string(from: now))"
+    }
+    
+    // MARK: - ESTATÍSTICAS DE VIAGEM INDIVIDUAL
+    func getTripSpeedDistribution(trip: Trip) -> [SpeedDistributionData] {
+        var data = [
+            SpeedDistributionData(range: "0-60", color: .green, minutes: 0),
+            SpeedDistributionData(range: "61-90", color: .blue, minutes: 0),
+            SpeedDistributionData(range: "91-120", color: .yellow, minutes: 0),
+            SpeedDistributionData(range: "121-150", color: .orange, minutes: 0),
+            SpeedDistributionData(range: "151+", color: .red, minutes: 0)
+        ]
+        
+        guard trip.points.count > 1 else { return data }
+        
+        for i in 0..<(trip.points.count - 1) {
+            let p1 = trip.points[i]
+            let p2 = trip.points[i+1]
+            let durationInMinutes = p2.timestamp.timeIntervalSince(p1.timestamp) / 60.0
+            let speedKmh = p1.speed * 3.6
+            
+            if speedKmh <= 60 { data[0].minutes += durationInMinutes }
+            else if speedKmh <= 90 { data[1].minutes += durationInMinutes }
+            else if speedKmh <= 120 { data[2].minutes += durationInMinutes }
+            else if speedKmh <= 150 { data[3].minutes += durationInMinutes }
+            else { data[4].minutes += durationInMinutes }
+        }
+        return data
     }
     
     // Variáveis legacy

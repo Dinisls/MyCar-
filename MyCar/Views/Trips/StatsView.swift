@@ -22,13 +22,13 @@ struct StatsView: View {
                     .pickerStyle(.segmented)
                     .padding(.horizontal)
                     
-                    // NOVO: Texto com as datas (Ex: 1 Jan - 1 Fev)
+                    // Texto com as datas (Ex: 1 Jan - 1 Fev)
                     Text(viewModel.getDateRangeString(for: selectedTimeRange))
                         .font(.caption)
                         .foregroundStyle(.gray)
                         .frame(maxWidth: .infinity, alignment: .center)
                     
-                    // 1. ESTATÍSTICAS GERAIS (Filtradas)
+                    // 1. ESTATÍSTICAS GERAIS (Grelha)
                     VStack(spacing: 15) {
                         Text("Overview")
                             .font(.headline)
@@ -74,7 +74,7 @@ struct StatsView: View {
                     .cornerRadius(12)
                     .padding(.horizontal)
                     
-                    // 2. GRÁFICO DE DISTRIBUIÇÃO (Filtrado)
+                    // 2. GRÁFICO DE DISTRIBUIÇÃO (Donut)
                     VStack(alignment: .leading, spacing: 15) {
                         Text("Speed Distribution")
                             .font(.headline)
@@ -84,35 +84,37 @@ struct StatsView: View {
                         
                         if totalMinutes == 0 {
                             VStack {
-                                Image(systemName: "chart.bar.xaxis")
+                                Image(systemName: "chart.pie.fill")
                                     .font(.largeTitle)
                                     .foregroundStyle(.gray)
-                                Text("No data for this period")
+                                Text("No speed data")
                                     .foregroundStyle(.gray)
                             }
                             .frame(height: 200)
                             .frame(maxWidth: .infinity)
                         } else {
-                            Chart(distData) { item in
-                                SectorMark(
-                                    angle: .value("Minutes", item.minutes),
-                                    innerRadius: .ratio(0.6),
-                                    angularInset: 2
-                                )
-                                .foregroundStyle(item.color)
-                                .cornerRadius(5)
+                            HStack {
+                                Chart(distData) { item in
+                                    SectorMark(
+                                        angle: .value("Minutes", item.minutes),
+                                        innerRadius: .ratio(0.6),
+                                        angularInset: 2
+                                    )
+                                    .foregroundStyle(item.color)
+                                    .cornerRadius(5)
+                                }
+                                .frame(height: 200)
+                                
+                                // Legenda
+                                VStack(alignment: .leading, spacing: 8) {
+                                    StatsLegendItem(color: .green, text: "0 - 60 km/h (City)")
+                                    StatsLegendItem(color: .blue, text: "61 - 90 km/h (Road)")
+                                    StatsLegendItem(color: .yellow, text: "91 - 120 km/h (Highway)")
+                                    StatsLegendItem(color: .orange, text: "121 - 150 km/h (Fast)")
+                                    StatsLegendItem(color: .red, text: "> 150 km/h (Extreme)")
+                                }
+                                .padding(.leading, 10)
                             }
-                            .frame(height: 250)
-                            
-                            // Legenda
-                            VStack(alignment: .leading, spacing: 8) {
-                                StatsLegendItem(color: .green, text: "0 - 60 km/h (City)")
-                                StatsLegendItem(color: .blue, text: "61 - 90 km/h (Road)")
-                                StatsLegendItem(color: .yellow, text: "91 - 120 km/h (Highway)")
-                                StatsLegendItem(color: .orange, text: "121 - 150 km/h (Fast)")
-                                StatsLegendItem(color: .red, text: "> 150 km/h (Extreme)")
-                            }
-                            .padding(.top, 10)
                         }
                     }
                     .padding()

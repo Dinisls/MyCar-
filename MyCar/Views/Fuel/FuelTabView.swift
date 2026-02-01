@@ -16,7 +16,8 @@ struct FuelTabView: View {
                 HStack(spacing: 20) {
                     
                     // BOTÃO 1: LISTA DE LOGS
-                    NavigationLink(destination: FuelCarListView(viewModel: viewModel)) {
+                    // Define o destino como .history
+                    NavigationLink(destination: FuelCarListView(viewModel: viewModel, destination: .history)) {
                         MenuButtonCard(
                             title: "Fuel Logs",
                             subtitle: "Add & View",
@@ -25,9 +26,9 @@ struct FuelTabView: View {
                         )
                     }
                     
-                    // BOTÃO 2: ESTATÍSTICAS (CORRIGIDO AQUI)
-                    // Agora aponta para o novo FuelGeneralStatsView
-                    NavigationLink(destination: FuelGeneralStatsView(viewModel: viewModel)) {
+                    // BOTÃO 2: ESTATÍSTICAS
+                    // Define o destino como .stats (CORRIGIDO)
+                    NavigationLink(destination: FuelCarListView(viewModel: viewModel, destination: .stats)) {
                         MenuButtonCard(
                             title: "Statistics",
                             subtitle: "Charts & Data",

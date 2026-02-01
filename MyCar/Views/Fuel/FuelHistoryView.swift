@@ -9,11 +9,15 @@ struct FuelHistoryView: View {
     
     var body: some View {
         List {
-            // 1. SECÇÃO DE RESUMO (Topo)
+            // 1. SECÇÃO DE RESUMO (TOPO)
             Section {
                 HStack(spacing: 16) {
+                    
+                    // Custo Total (Simples soma)
                     let totalSpent = car.fuelLogs.reduce(0) { $0 + $1.totalCost }
-                    let totalLiters = car.fuelLogs.reduce(0) { $0 + $1.liters }
+                    
+                    // Cálculo da Média CORRIGIDA (usa a função do ViewModel)
+                    let avgConsumption = viewModel.getRealAverageConsumption(for: car)
                     
                     SummaryCard(
                         title: "Total Cost",
@@ -23,10 +27,10 @@ struct FuelHistoryView: View {
                     )
                     
                     SummaryCard(
-                        title: "Total Volume",
-                        value: "\(String(format: "%.1f", totalLiters)) L",
-                        icon: "drop.fill",
-                        color: .blue
+                        title: "Avg. Consumption",
+                        value: String(format: "%.1f L/100km", avgConsumption),
+                        icon: "fuelpump.fill",
+                        color: .orange
                     )
                 }
                 .listRowInsets(EdgeInsets())
@@ -58,7 +62,6 @@ struct FuelHistoryView: View {
         .navigationTitle("Fuel History")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                // BOTÃO ADICIONAR (LIVRE)
                 Button {
                     showingAddFuel = true
                 } label: {
@@ -92,7 +95,7 @@ struct FuelHistoryView: View {
     }
 }
 
-// MARK: - COMPONENTES VISUAIS (Mantêm-se iguais)
+// MARK: - COMPONENTES VISUAIS
 
 struct SummaryCard: View {
     let title: String
@@ -122,122 +125,81 @@ struct FuelLogRow: View {
     var body: some View {
         VStack(spacing: 0) {
             
-            // --- HEADER: Logo, Data/Custo, Kms ---
+            // HEADER
             HStack(alignment: .top, spacing: 12) {
-                
-                // 1. Logo do Posto
                 Circle()
                     .fill(.white)
                     .frame(width: 40, height: 40)
                     .overlay(
                         Group {
                             if let name = log.stationName, !name.isEmpty {
-                                Text(String(name.prefix(1)))
-                                    .font(.headline)
-                                    .foregroundStyle(.red)
+                                Text(String(name.prefix(1))).font(.headline).foregroundStyle(.red)
                             } else {
-                                Image(systemName: "fuelpump.fill")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.blue)
+                                Image(systemName: "fuelpump.fill").font(.subheadline).foregroundStyle(.blue)
                             }
                         }
                     )
                 
-                // 2. Data e Custo Total
                 VStack(alignment: .leading, spacing: 2) {
                     Text(log.date.formatted(date: .numeric, time: .omitted))
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                    
+                        .font(.headline).foregroundStyle(.white)
                     Text(String(format: "%.2f €", log.totalCost))
-                        .font(.title3.bold())
-                        .foregroundStyle(.white)
+                        .font(.title3.bold()).foregroundStyle(.white)
                 }
                 
                 Spacer()
                 
-                // 3. KMs
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(Int(log.odometer)) km")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                    
+                    Text("\(Int(log.odometer)) km").font(.headline).foregroundStyle(.white)
                     if let dist = log.distanceTraveled {
-                        Text("\(Int(dist)) km")
-                            .font(.subheadline)
-                            .foregroundStyle(.gray)
+                        Text("\(Int(dist)) km").font(.subheadline).foregroundStyle(.gray)
                     } else {
-                        Text("--- km")
-                            .font(.subheadline)
-                            .foregroundStyle(.gray)
+                        Text("--- km").font(.subheadline).foregroundStyle(.gray)
                     }
                 }
             }
             .padding(.bottom, 10)
             
-            Divider().background(Color.gray.opacity(0.3))
-                .padding(.bottom, 10)
+            Divider().background(Color.gray.opacity(0.3)).padding(.bottom, 10)
             
-            // --- MEIO: Litros e Preço ---
+            // MEIO
             HStack {
                 Image(systemName: "drop.fill").foregroundStyle(.blue).font(.caption)
-                Text(String(format: "%.2f L", log.liters))
-                    .foregroundStyle(.white)
-                
+                Text(String(format: "%.2f L", log.liters)).foregroundStyle(.white)
                 Image(systemName: "arrow.right").font(.caption).foregroundStyle(.gray)
-                
-                Text(String(format: "%.3f €/L", log.pricePerLiter))
-                    .foregroundStyle(.white)
-                
-                Text("(\(log.fuelType))")
-                    .font(.caption)
-                    .foregroundStyle(.gray)
-                
+                Text(String(format: "%.3f €/L", log.pricePerLiter)).foregroundStyle(.white)
+                Text("(\(log.fuelType))").font(.caption).foregroundStyle(.gray)
                 Spacer()
             }
             .padding(.bottom, 8)
             
-            // --- RODAPÉ: Consumo e Custo p/ Km ---
+            // RODAPÉ
             HStack(spacing: 15) {
                 HStack(spacing: 4) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .foregroundStyle(.green)
-                    
+                    Image(systemName: "chart.line.uptrend.xyaxis").foregroundStyle(.green)
                     if let eff = log.efficiency {
-                        Text(String(format: "%.2f l/100km", eff))
-                            .bold()
-                            .foregroundStyle(.green)
+                        Text(String(format: "%.2f l/100km", eff)).bold().foregroundStyle(.green)
                     } else {
-                        Text("-- l/100km")
-                            .foregroundStyle(.gray)
+                        Text("-- l/100km").foregroundStyle(.gray)
                     }
                 }
                 
                 HStack(spacing: 4) {
-                    Image(systemName: "dollarsign.circle")
-                        .foregroundStyle(.gray)
-                    
+                    Image(systemName: "dollarsign.circle").foregroundStyle(.gray)
                     if let dist = log.distanceTraveled, dist > 0 {
                         let costPerKm = log.totalCost / dist
-                        Text(String(format: "%.2f €/km", costPerKm))
-                            .foregroundStyle(.gray)
+                        Text(String(format: "%.2f €/km", costPerKm)).foregroundStyle(.gray)
                     } else {
-                        Text("--- €")
-                            .foregroundStyle(.gray)
+                        Text("--- €").foregroundStyle(.gray)
                     }
                 }
-                
                 Spacer()
             }
             
             if let station = log.stationName {
                 HStack {
-                    Image(systemName: "mappin.and.ellipse")
-                        .font(.caption)
-                        .foregroundStyle(.blue)
-                    Text(station)
-                        .font(.caption)
-                        .foregroundStyle(.white)
+                    Image(systemName: "mappin.and.ellipse").font(.caption).foregroundStyle(.blue)
+                    Text(station).font(.caption).foregroundStyle(.white)
                     Spacer()
                 }
                 .padding(.top, 8)
