@@ -110,6 +110,8 @@ struct CarDetailView: View {
     }
 }
 
+
+
 // Subview para os cartões de detalhe
 struct DetailCard: View {
     let title: String
